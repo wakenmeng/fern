@@ -69,7 +69,7 @@ Operations 是备用页，被问到「内部怎么运营」时再打开。
 
 | 数据 | 线上来源 |
 |---|---|
-| Trace | 应用用 OpenTelemetry 导出到集群内的 Tempo；API 响应带 `traceparent`，前端通过 `GET /v1/traces/{trace_id}`（后端代理查询 Tempo）取 span |
+| Trace | 已实现（`src/fern/platform/tracing.py`）：每个改动状态的请求在进程内记录 span，按 space 存进 `traces` 表；响应头带 `X-Trace-Id`，前端用 `GET /traces/{id}` 取回。字段和 OpenTelemetry 一致，以后可以再导出到 OTLP |
 | 节点状态 | CloudWatch（ALB、RDS、ElastiCache）、Kubernetes API（Pod 状态）、Prometheus（应用指标） |
 | 第三方监控 | 应用自己的出站调用直方图 `fern_bank_call_duration_seconds` 等，按 provider 分组 |
 | 压测 | k6 输出的 JSON 汇总 + 参考模型比对结果，作为静态 JSON 随版本发布 |
@@ -101,10 +101,11 @@ Operations 是备用页，被问到「内部怎么运营」时再打开。
 
 | 项 | 用途 |
 |---|---|
-| OpenTelemetry 埋点（FastAPI、asyncpg、httpx、redis）+ Tempo | Trace 面板 |
-| `GET /v1/traces/{trace_id}` | 按 trace id 取 span（只返回当前 space 自己的 trace） |
-| Redis 限流（token bucket）、AI 预算预占 | trace 里的 Redis 节点；DESIGN 已规划，代码里还没有 |
-| Plaid 余额检查（`/accounts/balance/get`） | S2 trace 里的 Plaid 节点；配置已有，调用还没写 |
+| ~~Trace 记录 + `GET /traces`、`GET /traces/{id}`~~ | 已完成：SQL、事务、银行、Plaid、Redis 都有 span；只保存非 GET 请求；只能读自己 space 的 |
+| ~~Redis 限流（token bucket）~~ | 已完成：每个 space 一个桶，作用于 pulls / p2p / withdrawals / write-offs；Redis 不可用时放行并记在 trace 里。AI 预算预占还没有 |
+| ~~Plaid 余额检查~~ | 已完成：首次拉款时创建 Plaid 沙箱 Item（自定义用户，余额 $3,240.18），余额不足或 Plaid 无响应时拒绝拉款（`FERN_PLAID=sandbox`） |
+| `/v1` 前缀、Column webhook 接口（HMAC 验签） | 现在只有 `/webhooks/sim`；原型里画的是 `/v1/webhooks/column` |
+| Cloudflare / ALB 节点 | 应用测不到它们的耗时；trace 根 span 记录 `cf-ray` 和 `X-Amzn-Trace-Id`，前端据此点亮这两个节点，但不显示耗时 |
 | `POST /v1/ops/reconciliation/run`、`recon_runs` / `recon_exceptions` 表 | 对账 |
 | `GET /v1/status`（聚合 CloudWatch、K8s、Prometheus） | 架构页的节点状态 |
 | `POST /v1/ops/reports` | AI 日报 |

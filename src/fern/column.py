@@ -20,12 +20,15 @@ Verified against the sandbox on 2026-11-12 (scripts/column_probe.py):
 """
 
 import asyncio
+import json as _json
+import re
 from datetime import datetime
 from typing import Any
 
 import httpx
 
 from fern.bank import BankConflict, BankOutcomeUnknown, BankRejected, BankTxn, Direction, Fault, TransferSnapshot
+from fern.platform import tracing
 
 # Column statuses -> our three coarse states. Anything not listed is unexpected and is raised.
 _IN_FLIGHT = {
@@ -43,6 +46,11 @@ _RETURNED = {"RETURNED", "RETURN_CONTESTED"}
 
 # A valid ABA routing number for the sandbox counterparty (the external account).
 SANDBOX_COUNTERPARTY = {"routing_number": "021000021", "account_number": "000123456789", "account_type": "checking"}
+
+
+def _route(path: str) -> str:
+    """Span name for a path: ids replaced by placeholders so similar calls group together."""
+    return re.sub(r"/[a-z]+_[A-Za-z0-9]{8,}", "/{id}", path.split("?")[0])
 
 
 class ColumnError(Exception):
@@ -94,6 +102,7 @@ class ColumnBank:
     def __init__(self, api_key: str, base_url: str = "https://api.column.com", timeout: float = 15.0) -> None:
         if not api_key.startswith("test_"):
             raise ColumnError("refusing to run without a Column sandbox key (test_...)")
+        self.base_url = base_url
         self._http = httpx.AsyncClient(base_url=base_url, auth=("", api_key), timeout=timeout)
         self._faults: dict[str, Fault] = {}
         self._entity_id: str | None = None
@@ -113,22 +122,44 @@ class ColumnBank:
         idempotency_key: str | None = None,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
+        drop_response: bool = False,
     ) -> dict[str, Any]:
         headers = {"Idempotency-Key": idempotency_key} if idempotency_key else {}
-        for attempt in range(5):
-            try:
-                r = await self._http.request(method, path, json=json, params=params, headers=headers)
-            except (httpx.TimeoutException, httpx.TransportError) as e:
-                raise BankOutcomeUnknown(f"{method} {path}: {type(e).__name__}") from e
-            # Rate limited: the request was not processed, so retrying (same idempotency key) is safe.
-            if r.status_code != 429 or attempt == 4:
-                break
-            await asyncio.sleep(float(r.headers.get("Retry-After") or 2**attempt))
-        if r.status_code == 429 or r.status_code >= 500:
-            raise BankOutcomeUnknown(f"{method} {path}: HTTP {r.status_code}")
-        if r.status_code >= 400:
-            raise BankRejected(f"{method} {path}: HTTP {r.status_code} {r.text[:300]}")
-        return r.json() if r.content else {}
+        attrs: dict[str, Any] = {"http.method": method, "http.url": f"{self.base_url}{path}", "peer.service": "Column"}
+        if idempotency_key:
+            attrs["idempotency_key"] = idempotency_key
+        if json is not None:
+            attrs["http.request.body"] = _json.dumps(json)[:600]
+        if params:
+            attrs["http.request.params"] = _json.dumps(params)
+        with tracing.span("column", f"{method} {_route(path)}", **attrs) as s:
+            for attempt in range(5):
+                try:
+                    r = await self._http.request(method, path, json=json, params=params, headers=headers)
+                except (httpx.TimeoutException, httpx.TransportError) as e:
+                    raise BankOutcomeUnknown(f"{method} {path}: {type(e).__name__}") from e
+                # Rate limited: the request was not processed, so retrying (same idempotency key) is safe.
+                if r.status_code != 429 or attempt == 4:
+                    break
+                if s is not None:
+                    s.attrs["http.retries_after_429"] = attempt + 1
+                await asyncio.sleep(float(r.headers.get("Retry-After") or 2**attempt))
+            if s is not None:
+                s.attrs["http.status_code"] = r.status_code
+            if r.status_code == 429 or r.status_code >= 500:
+                raise BankOutcomeUnknown(f"{method} {path}: HTTP {r.status_code}")
+            if r.status_code >= 400:
+                raise BankRejected(f"{method} {path}: HTTP {r.status_code} {r.text[:300]}")
+            body = r.json() if r.content else {}
+            if s is not None and isinstance(body, dict):
+                s.attrs.update({f"column.{k}": body[k] for k in ("id", "status", "type", "amount") if k in body})
+            if drop_response:
+                if s is not None:
+                    s.attrs["drill"] = (
+                        "Column created the transfer; its reply is dropped as if the connection timed out"
+                    )
+                raise BankOutcomeUnknown("injected: Column created the transfer but the response was lost")
+            return body
 
     # --- Bank interface
 
@@ -145,7 +176,8 @@ class ColumnBank:
             raise BankRejected("a Column bank account id is required")
         fault = self._faults.pop(idempotency_key, None)
         if fault == "unavailable":
-            raise BankOutcomeUnknown("injected: 503 before the request reached Column")
+            with tracing.span("column", "POST /transfers/ach", drill="503 before the request reached Column"):
+                raise BankOutcomeUnknown("injected: 503 before the request reached Column")
         body = {
             "type": "CREDIT" if direction == "credit" else "DEBIT",
             # Consumer accounts: PPD for credits we push, WEB for debits authorized online.
@@ -158,11 +190,11 @@ class ColumnBank:
             "receiver_name": counterparty_name[:22],
             "description": f"fern {idempotency_key}",
         }
-        obj = await self._request("POST", "/transfers/ach", idempotency_key=idempotency_key, json=body)
+        obj = await self._request(
+            "POST", "/transfers/ach", idempotency_key=idempotency_key, json=body, drop_response=fault == "drop_response"
+        )
         if int(obj["amount"]) != amount_minor or obj["type"] != body["type"]:
             raise BankConflict(f"key {idempotency_key} already used for {obj['id']} ({obj['type']} {obj['amount']})")
-        if fault == "drop_response":
-            raise BankOutcomeUnknown("injected: Column created the transfer but the response was lost")
         return to_snapshot(obj)
 
     async def get_transfer(self, bank_transfer_id: str) -> TransferSnapshot:

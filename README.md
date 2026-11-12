@@ -18,7 +18,7 @@ modes a real money system has to survive. **Sandbox only. No real money, no real
 Requires Docker and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-make up        # Postgres in Docker
+make up        # Postgres and Redis in Docker
 make migrate   # apply migrations/*.sql
 make test      # scenario and failure tests
 make dev       # API on http://localhost:8000/docs
@@ -30,6 +30,13 @@ A simulated payroll takes about 2 minutes to land there, so the live demo pre-fu
 (`make pool`) and runs with `FERN_POOL_ONLY=true`. `FERN_RUN_COLUMN=1 uv run pytest tests/test_column_live.py`
 runs the five cases on the sandbox and reconciles the ledger against Column's balance.
 
+Pulls check the linked account's balance first. With `FERN_PLAID=sandbox` plus `FERN_PLAID_CLIENT_ID` and
+`FERN_PLAID_SECRET` that is a real Plaid sandbox Item; the default `sim` uses a fixed balance. Money-moving
+requests are rate limited per space through Redis (`FERN_REDIS_URL`, `FERN_RATE_LIMIT_PER_MINUTE`).
+
+Every state-changing request is traced: the response carries `X-Trace-Id`, and `GET /traces/{id}` returns
+its spans (each SQL statement, transaction, bank, Plaid and Redis call) for the caller's own space.
+
 ## Layout
 
 ```
@@ -38,11 +45,12 @@ src/fern/
   ledger.py        double-entry posting with per-effect rules
   bank.py          bank client interface + a Column-like simulated bank with fault injection
   payments.py      the five flows, bank-fact handling, recovery of unknown outcomes
+  plaid.py         linked-account balance check before pulls (Plaid sandbox or simulator)
   column.py        Column sandbox adapter (same interface as the simulator)
   spaces.py        demo spaces (one isolated book per visitor)
   pool.py          pre-funded pool of spaces, claimed one per visitor
   api.py           FastAPI routes
-  platform/        config, database, sessions, idempotency, migrations
+  platform/        config, database, sessions, idempotency, migrations, tracing, rate limits
 tests/
 docs/DESIGN.md     full design (Chinese working draft)
 ```

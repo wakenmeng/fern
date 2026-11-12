@@ -21,9 +21,14 @@ class Settings(BaseSettings):
     pool_only: bool = False
     column_api_key: str = ""
     column_base_url: str = "https://api.column.com"
+    # Linked external accounts: an in-process simulator ("sim") or the Plaid sandbox ("sandbox").
+    plaid: Literal["sim", "sandbox"] = "sim"
     plaid_client_id: str = ""
     plaid_secret: str = ""
     plaid_env: str = "sandbox"
+    # Rate limiting (token bucket per space on money-moving requests). Empty URL: no limiter.
+    redis_url: str = "redis://localhost:63799/0"
+    rate_limit_per_minute: int = 30
 
 
 @lru_cache

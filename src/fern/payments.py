@@ -21,7 +21,8 @@ from psycopg.types.json import Jsonb
 from fern import ledger
 from fern.bank import Bank, BankConflict, BankEvent, BankOutcomeUnknown, BankRejected, BankTxn, TransferSnapshot
 from fern.ledger import Entry
-from fern.platform import idempotency
+from fern.plaid import PlaidError, SourceAccount
+from fern.platform import idempotency, tracing
 from fern.platform.config import get_settings
 from fern.platform.db import transaction
 from fern.platform.idempotency import Response
@@ -160,7 +161,8 @@ async def _idempotent(
         await idempotency.save(c, response=response, **ids)
         return response
 
-    return await transaction(conn, tx)
+    # Name the transaction after the flow (request_withdrawal), not this wrapper.
+    return await transaction(conn, tx, name=work.__qualname__.split(".<locals>")[0])
 
 
 def _created(t: dict[str, Any]) -> Response:
@@ -348,11 +350,20 @@ async def request_pull(
 # --------------------------------------------------------------------------- bank interaction
 
 
-async def submit_to_bank(conn: AsyncConnection, bank: Bank, space_id: UUID, transfer_id: UUID) -> dict[str, Any]:
-    """Send a withdrawal or pull to the bank. Safe to call again: it reuses the same idempotency key."""
+async def submit_to_bank(
+    conn: AsyncConnection, bank: Bank, space_id: UUID, transfer_id: UUID, source: SourceAccount | None = None
+) -> dict[str, Any]:
+    """Send a withdrawal or pull to the bank. Safe to call again: it reuses the same idempotency key.
+
+    A new pull first checks the source account's balance with Plaid (when `source` is given)."""
     t = await get_transfer(conn, space_id, transfer_id)
     if t["status"] not in ("held", "pending", "unknown"):
         return t
+    if source is not None and t["kind"] == "pull" and t["status"] == "pending":
+        shortfall = await _source_shortfall(conn, source, space_id, t)
+        if shortfall:
+            await transaction(conn, lambda c: _fail(c, t, shortfall, event="source_check_failed"))
+            return await get_transfer(conn, space_id, transfer_id)
     cur = await conn.execute("SELECT bank_account_id FROM spaces WHERE id = %s", (space_id,))
     account_ref = (await cur.fetchone())["bank_account_id"]
     try:
@@ -377,13 +388,29 @@ async def submit_to_bank(conn: AsyncConnection, bank: Bank, space_id: UUID, tran
     return await get_transfer(conn, space_id, transfer_id)
 
 
-async def _fail(c: AsyncConnection, t: dict[str, Any], reason: str) -> None:
+async def _source_shortfall(conn: AsyncConnection, source: SourceAccount, space_id: UUID, t: dict[str, Any]) -> str:
+    """Why the linked account can't fund this pull, or "" if it can."""
+    cur = await conn.execute("SELECT plaid_access_token FROM spaces WHERE id = %s", (space_id,))
+    token = (await cur.fetchone())["plaid_access_token"]
+    try:
+        if token is None:
+            token = await source.link()
+            await conn.execute("UPDATE spaces SET plaid_access_token = %s WHERE id = %s", (token, space_id))
+        available = await source.available_balance(token)
+    except PlaidError as exc:
+        return f"could not check the linked account: {exc}"
+    if available < t["amount_minor"]:
+        return f"linked account has {available} cents available, the pull needs {t['amount_minor']}"
+    return ""
+
+
+async def _fail(c: AsyncConnection, t: dict[str, Any], reason: str, event: str = "bank_rejected") -> None:
     await c.execute("UPDATE holds SET status = 'released' WHERE transfer_id = %s AND status = 'active'", (t["id"],))
     await c.execute(
         "UPDATE transfers SET status = 'failed', failure_reason = %s, updated_at = now() WHERE id = %s",
         (reason, t["id"]),
     )
-    await _event(c, t["id"], "bank_rejected", reason=reason)
+    await _event(c, t["id"], event, reason=reason)
 
 
 async def _mark_unknown(c: AsyncConnection, t: dict[str, Any], reason: str) -> None:
@@ -424,6 +451,7 @@ async def handle_bank_event(conn: AsyncConnection, bank: Bank, event: BankEvent)
     t = await cur.fetchone()
     if t is None:
         return "unknown_transfer"
+    tracing.set_space(t["space_id"])
     snapshot = await bank.get_transfer(event.bank_transfer_id)
     await apply_snapshot(conn, bank.provider, t["space_id"], t["id"], snapshot)
     # Mark the event done only after it was applied, so a crash in between means a harmless redo.

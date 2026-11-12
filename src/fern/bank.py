@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from typing import Literal, Protocol
 from uuid import uuid4
 
+from fern.platform import tracing
+
 Direction = Literal["credit", "debit"]
 Fault = Literal["drop_response", "unavailable"]
 
@@ -92,6 +94,10 @@ class Bank(Protocol):
     def inject_fault(self, idempotency_key: str, fault: Fault) -> None: ...
 
 
+def _sim(**attrs: object) -> dict[str, object]:
+    return {"bank.mode": "in-process simulator (Column-like)", **attrs}
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -120,6 +126,12 @@ class SimulatedBank:
         counterparty_name: str,
         account_ref: str | None = None,
     ) -> TransferSnapshot:
+        with tracing.span("bank-sim", "POST /transfers/ach", **_sim(idempotency_key=idempotency_key)) as s:
+            return self._create(s, idempotency_key, direction, amount_minor)
+
+    def _create(
+        self, s: tracing.Span | None, idempotency_key: str, direction: Direction, amount_minor: int
+    ) -> TransferSnapshot:
         fault = self.faults.pop(idempotency_key, None)
         if fault == "unavailable":
             # 503 before the request was processed. The caller cannot tell, so it's "unknown".
@@ -139,17 +151,29 @@ class SimulatedBank:
             self.by_key[idempotency_key] = bank_id
             self._emit(bank_id, "ach.outgoing_transfer.initiated")
 
+        if s is not None:
+            s.attrs.update({"bank.transfer_id": snapshot.bank_transfer_id, "bank.status": snapshot.status})
         if fault == "drop_response":
             # The bank created the transfer, but the response never reached us.
+            if s is not None:
+                s.attrs["drill"] = "the bank created the transfer; the response is dropped"
             raise BankOutcomeUnknown("timed out waiting for the bank")
         return snapshot
 
     async def get_transfer(self, bank_transfer_id: str) -> TransferSnapshot:
-        return self.transfers[bank_transfer_id]
+        with tracing.span("bank-sim", "GET /transfers/ach/{id}", **_sim()) as s:
+            snapshot = self.transfers[bank_transfer_id]
+            if s is not None:
+                s.attrs.update({"bank.transfer_id": bank_transfer_id, "bank.status": snapshot.status})
+            return snapshot
 
     # --- sandbox controls (what Column's simulation endpoints do) ---
 
     async def settle(self, bank_transfer_id: str) -> TransferSnapshot:
+        with tracing.span("bank-sim", "POST /simulate/transfers/ach/settle", **_sim()):
+            return self._settle(bank_transfer_id)
+
+    def _settle(self, bank_transfer_id: str) -> TransferSnapshot:
         s = self.transfers[bank_transfer_id]
         if s.status != "initiated":
             return s
@@ -162,9 +186,13 @@ class SimulatedBank:
         return s
 
     async def return_transfer(self, bank_transfer_id: str, return_code: str) -> TransferSnapshot:
+        with tracing.span("bank-sim", "POST /simulate/transfers/ach/return", **_sim(return_code=return_code)):
+            return self._return(bank_transfer_id, return_code)
+
+    def _return(self, bank_transfer_id: str, return_code: str) -> TransferSnapshot:
         s = self.transfers[bank_transfer_id]
         if s.status == "initiated":
-            s = await self.settle(bank_transfer_id)  # a return always follows settlement
+            s = self._settle(bank_transfer_id)  # a return always follows settlement
         if s.status == "returned":
             return s
         amount = s.amount_minor if s.direction == "credit" else -s.amount_minor
@@ -178,7 +206,8 @@ class SimulatedBank:
         self, amount_minor: int, account_ref: str | None = None, account_number_ref: str | None = None
     ) -> BankTxn:
         """An incoming ACH credit, e.g. payroll, already posted to the account."""
-        return BankTxn(f"txn_{uuid4().hex[:16]}", amount_minor, "incoming", _now())
+        with tracing.span("bank-sim", "POST /simulate/receive-ach-credit", **_sim(amount=amount_minor)):
+            return BankTxn(f"txn_{uuid4().hex[:16]}", amount_minor, "incoming", _now())
 
     async def request_incoming_credit(self, amount_minor: int, account_ref: str, account_number_ref: str) -> None:
         self.incoming.setdefault(account_ref, []).append(await self.receive_payroll(amount_minor))

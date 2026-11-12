@@ -20,10 +20,13 @@ from pydantic import BaseModel, Field
 from fern import ledger, payments, pool, spaces
 from fern.bank import Bank, BankEvent, BankTxn, SimulatedBank
 from fern.column import ColumnBank
+from fern.plaid import PlaidClient, SimulatedPlaid, SourceAccount
 from fern.platform import session as sessions
+from fern.platform import tracing
 from fern.platform.config import Settings, get_settings
 from fern.platform.db import create_pool
 from fern.platform.idempotency import IdempotencyKeyReused, Response
+from fern.platform.ratelimit import RateLimiter
 from fern.platform.session import Session
 
 SIMULATED_APPROVER = "ops:simulated-approver"
@@ -35,6 +38,12 @@ def make_bank(settings: Settings) -> Bank:
     return SimulatedBank()
 
 
+def make_source(settings: Settings) -> SourceAccount:
+    if settings.plaid == "sandbox":
+        return PlaidClient(settings.plaid_client_id, settings.plaid_secret, settings.plaid_env)
+    return SimulatedPlaid()
+
+
 def create_app(settings: Settings | None = None, bank: Bank | None = None) -> FastAPI:
     settings = settings or get_settings()
 
@@ -42,14 +51,42 @@ def create_app(settings: Settings | None = None, bank: Bank | None = None) -> Fa
     async def lifespan(app: FastAPI):
         app.state.pool = create_pool(settings.database_url)
         await app.state.pool.open()
+        app.state.limiter = (
+            RateLimiter(settings.redis_url, settings.rate_limit_per_minute) if settings.redis_url else None
+        )
         yield
         await app.state.pool.close()
-        if isinstance(app.state.bank, ColumnBank):
-            await app.state.bank.aclose()
+        for client in (app.state.bank, app.state.source, app.state.limiter):
+            if hasattr(client, "aclose"):
+                await client.aclose()
 
     app = FastAPI(title="Fern", version="0.1.0", root_path=settings.root_path, lifespan=lifespan)
     app.state.settings = settings
     app.state.bank = bank or make_bank(settings)
+    app.state.source = make_source(settings)
+
+    @app.middleware("http")
+    async def trace_requests(request: Request, call_next):
+        # State-changing requests get a trace, stored under the caller's space (FRONTEND §3).
+        path = request.url.path
+        if request.method == "GET" or "/traces" in path:
+            return await call_next(request)
+        attrs: dict[str, Any] = {"http.method": request.method, "http.target": path}
+        for header, attr in (("cf-ray", "cf.ray"), ("x-amzn-trace-id", "aws.alb.trace_id")):
+            if value := request.headers.get(header):
+                attrs[attr] = value
+        with tracing.start("api", f"{request.method} {path}", **attrs) as tr:
+            response = await call_next(request)
+            if (route := request.scope.get("route")) is not None:
+                tr.root.name = f"{request.method} {route.path}"
+            tr.root.attrs["http.status_code"] = response.status_code
+            if response.status_code >= 500:
+                tr.root.status = "error"
+        response.headers["X-Trace-Id"] = tr.id
+        if tr.space_id is not None:
+            async with app.state.pool.connection() as c:
+                await tracing.save(c, tr)
+        return response
 
     @app.exception_handler(payments.PaymentError)
     async def payment_error(_: Request, exc: payments.PaymentError) -> JSONResponse:
@@ -79,12 +116,21 @@ def current_session(request: Request, authorization: Annotated[str | None, Heade
     s = sessions.verify(token, request.app.state.settings.session_secret) if token else None
     if s is None:
         raise HTTPException(401, "missing or invalid session token")
+    tracing.set_space(s.space_id)
     return s
+
+
+async def rate_limited(request: Request, auth: Annotated[Session, Depends(current_session)]) -> None:
+    """Money-moving requests: a token bucket per space in Redis."""
+    limiter: RateLimiter | None = request.app.state.limiter
+    if limiter is not None and not await limiter.allow(str(auth.space_id)):
+        raise HTTPException(429, "too many requests for this space", headers={"Retry-After": "2"})
 
 
 Conn = Annotated[AsyncConnection, Depends(conn)]
 Auth = Annotated[Session, Depends(current_session)]
 IdemKey = Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=255)]
+Limited = Depends(rate_limited)
 
 
 def _json(r: Response) -> JSONResponse:
@@ -132,6 +178,7 @@ def _routes(app: FastAPI) -> None:
         return await pool.stats(db)
 
     def _session_body(s: spaces.NewSpace) -> dict[str, Any]:
+        tracing.set_space(s.space_id)
         token = sessions.issue(Session(s.space_id, s.customer_id), app.state.settings.session_secret)
         return {
             "space_id": s.space_id,
@@ -186,7 +233,7 @@ def _routes(app: FastAPI) -> None:
         return (await payments.transfer_view(db, auth.space_id, tid))["transfer"]
 
     # S2 / S5
-    @app.post("/pulls")
+    @app.post("/pulls", dependencies=[Limited])
     async def pull(body: PullRequest, db: Conn, auth: Auth, key: IdemKey) -> JSONResponse:
         r = await payments.request_pull(
             db,
@@ -198,11 +245,11 @@ def _routes(app: FastAPI) -> None:
             counterparty_name=body.counterparty_name,
         )
         if r.status_code == 201:
-            await payments.submit_to_bank(db, bank, auth.space_id, UUID(r.body["id"]))
+            await payments.submit_to_bank(db, bank, auth.space_id, UUID(r.body["id"]), app.state.source)
         return _json(r)
 
     # S3
-    @app.post("/p2p")
+    @app.post("/p2p", dependencies=[Limited])
     async def p2p(body: P2PRequest, db: Conn, auth: Auth, key: IdemKey) -> JSONResponse:
         return _json(
             await payments.send_p2p(
@@ -217,7 +264,7 @@ def _routes(app: FastAPI) -> None:
         )
 
     # S4
-    @app.post("/withdrawals")
+    @app.post("/withdrawals", dependencies=[Limited])
     async def withdraw(body: WithdrawalRequest, db: Conn, auth: Auth, key: IdemKey) -> JSONResponse:
         r = await payments.request_withdrawal(
             db,
@@ -281,7 +328,7 @@ def _routes(app: FastAPI) -> None:
         return {"result": await payments.handle_bank_event(db, bank, e)}
 
     # S5: write-off with a second approver
-    @app.post("/write-offs", status_code=201)
+    @app.post("/write-offs", status_code=201, dependencies=[Limited])
     async def write_off(db: Conn, auth: Auth) -> dict[str, Any]:
         return await payments.request_write_off(db, auth.space_id, auth.customer_id, f"ops:{auth.customer_id}")
 
@@ -289,6 +336,18 @@ def _routes(app: FastAPI) -> None:
     async def approve(write_off_id: UUID, db: Conn, auth: Auth) -> dict[str, Any]:
         # The demo's second approver is simulated and clearly labelled as such.
         return await payments.approve_write_off(db, auth.space_id, write_off_id, SIMULATED_APPROVER)
+
+    @app.get("/traces")
+    async def traces(db: Conn, auth: Auth, limit: int = 20) -> dict[str, Any]:
+        """The space's most recent traces, newest first."""
+        return {"traces": await tracing.recent(db, auth.space_id, max(1, min(limit, 100)))}
+
+    @app.get("/traces/{trace_id}")
+    async def trace(trace_id: str, db: Conn, auth: Auth) -> dict[str, Any]:
+        t = await tracing.get(db, auth.space_id, trace_id)
+        if t is None:
+            raise HTTPException(404, "no such trace in this space")
+        return t
 
     @app.get("/ledger/trial-balance")
     async def trial_balance(db: Conn, auth: Auth) -> dict[str, Any]:
