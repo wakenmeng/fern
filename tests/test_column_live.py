@@ -9,6 +9,7 @@ import httpx
 import pytest
 from conftest import TEST_DB
 
+from fern import pool as fern_pool
 from fern.api import create_app
 from fern.platform.config import Settings, get_settings
 
@@ -32,6 +33,12 @@ async def client():
 
 
 async def test_five_cases_on_column_sandbox(client):
+    # Pre-fund one pooled space, the way the live demo does before visitors arrive.
+    async with client.app.state.pool.connection() as conn:
+        await conn.execute("UPDATE spaces SET pool_status = 'claimed' WHERE pool_status <> 'claimed'")
+        result = await fern_pool.provision(conn, client.app.state.bank, 1, poll_seconds=10)
+    assert result["ready"] == 1, result
+
     s = (await client.post("/spaces")).json()
     h = {"Authorization": f"Bearer {s['token']}"}
 
@@ -42,8 +49,8 @@ async def test_five_cases_on_column_sandbox(client):
         me = (await client.get("/me", headers=h)).json()
         return next(c for c in me["customers"] if c["id"] == s["customer_id"])["available_minor"]
 
-    # S1: payroll lands (Column simulation, force-settled)
-    r = await client.post("/demo/payroll", json={"amount_minor": 2000_00}, headers=h)
+    # S1: the pooled payroll is already on the Column account, so recording it is instant.
+    r = await client.post("/demo/payroll", headers=h)
     assert r.status_code == 201, r.text
     assert await my_available() == 2000_00
 

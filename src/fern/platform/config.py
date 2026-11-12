@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     pull_hold_seconds: int = 600
     # Which bank backs the demo: the in-process simulator or the Column sandbox.
     bank: Literal["sim", "column"] = "sim"
+    # Live demo: visitors only get pre-funded spaces from the pool (fern.pool). When it is empty,
+    # POST /spaces returns 503 instead of opening a space whose payroll takes minutes to land.
+    pool_only: bool = False
     column_api_key: str = ""
     column_base_url: str = "https://api.column.com"
     plaid_client_id: str = ""

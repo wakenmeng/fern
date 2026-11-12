@@ -17,8 +17,8 @@ from fastapi.responses import JSONResponse
 from psycopg import AsyncConnection
 from pydantic import BaseModel, Field
 
-from fern import ledger, payments, spaces
-from fern.bank import Bank, BankEvent, SimulatedBank
+from fern import ledger, payments, pool, spaces
+from fern.bank import Bank, BankEvent, BankTxn, SimulatedBank
 from fern.column import ColumnBank
 from fern.platform import session as sessions
 from fern.platform.config import Settings, get_settings
@@ -95,6 +95,11 @@ class Amount(BaseModel):
     amount_minor: int = Field(gt=0, le=1_000_000_00)
 
 
+class PayrollRequest(BaseModel):
+    # Ignored for pooled spaces, whose payroll has already landed at the bank.
+    amount_minor: int = Field(default=pool.PAYROLL_MINOR, gt=0, le=1_000_000_00)
+
+
 class P2PRequest(Amount):
     to_customer_id: UUID
 
@@ -122,9 +127,17 @@ def _routes(app: FastAPI) -> None:
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/pool")
+    async def pool_stats(db: Conn) -> dict[str, int]:
+        return await pool.stats(db)
+
     @app.post("/spaces", status_code=201)
     async def create_space(db: Conn) -> dict[str, Any]:
-        s = await spaces.create_space(db, bank)
+        s = await pool.claim(db)
+        if s is None:
+            if app.state.settings.pool_only:
+                raise HTTPException(503, "all demo spaces are taken")
+            s = await spaces.create_space(db, bank)
         token = sessions.issue(Session(s.space_id, s.customer_id), app.state.settings.session_secret)
         return {
             "space_id": s.space_id,
@@ -146,12 +159,14 @@ def _routes(app: FastAPI) -> None:
 
     # S1
     @app.post("/demo/payroll", status_code=201)
-    async def payroll(body: Amount, db: Conn, auth: Auth) -> dict[str, Any]:
-        cur = await db.execute(
-            "SELECT bank_account_id, bank_account_number_id FROM spaces WHERE id = %s", (auth.space_id,)
-        )
-        acct = await cur.fetchone()
-        txn = await bank.receive_payroll(body.amount_minor, acct["bank_account_id"], acct["bank_account_number_id"])
+    async def payroll(db: Conn, auth: Auth, body: PayrollRequest | None = None) -> dict[str, Any]:
+        cur = await db.execute("SELECT * FROM spaces WHERE id = %s", (auth.space_id,))
+        sp = await cur.fetchone()
+        if sp["payroll_txn_id"]:  # pooled space: the credit is already on the bank account
+            txn = BankTxn(sp["payroll_txn_id"], sp["payroll_amount_minor"], "incoming", sp["payroll_posted_at"])
+        else:
+            amount = (body or PayrollRequest()).amount_minor
+            txn = await bank.receive_payroll(amount, sp["bank_account_id"], sp["bank_account_number_id"])
         tid = await payments.record_incoming_credit(db, bank.provider, auth.space_id, auth.customer_id, txn)
         return (await payments.transfer_view(db, auth.space_id, tid))["transfer"]
 

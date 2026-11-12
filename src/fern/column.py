@@ -177,29 +177,38 @@ class ColumnBank:
         await self._request("POST", "/simulate/transfers/ach/settle", json={"ach_transfer_id": bank_transfer_id})
         return await self.get_transfer(bank_transfer_id)
 
-    async def receive_payroll(
-        self, amount_minor: int, account_ref: str | None = None, account_number_ref: str | None = None
-    ) -> BankTxn:
-        """Simulate an incoming payroll ACH credit and force it to settle (otherwise it waits for the
-        next Fed window). Returns it as a cash transaction keyed by Column's transfer id."""
-        if not account_ref or not account_number_ref:
-            raise BankRejected("this space has no Column bank account")
-        before = {t["id"] for t in await self._incoming_credits(account_ref)}
+    async def request_incoming_credit(self, amount_minor: int, account_ref: str, account_number_ref: str) -> None:
+        """Ask the sandbox to send us an incoming ACH credit (payroll). It shows up ~2 minutes later."""
         await self._request(
             "POST",
             "/simulate/receive-ach-credit",
             json={"amount": amount_minor, "currency_code": "USD", "destination_account_number_id": account_number_ref},
         )
-        # Column documents up to a minute; in the sandbox we measured ~2 minutes. The live demo
-        # therefore pre-funds pooled accounts ahead of time instead of making visitors wait.
+
+    async def find_incoming_credit(self, account_ref: str, exclude: frozenset[str] = frozenset()) -> BankTxn | None:
+        """The first incoming credit on the account not in `exclude`, force-settled (otherwise it waits
+        for the next Fed window), as a cash transaction keyed by Column's transfer id."""
+        new = [t for t in await self._incoming_credits(account_ref) if t["id"] not in exclude]
+        if not new:
+            return None
+        t = new[0]
+        if t["status"] not in _SETTLED:
+            await self._request("POST", "/simulate/transfers/ach/settle", json={"ach_transfer_id": t["id"]})
+            t = await self.get_transfer_raw(t["id"])
+        return BankTxn(t["id"], int(t["amount"]), "incoming", _ts(t.get("settled_at")) or _ts(t["created_at"]))
+
+    async def receive_payroll(
+        self, amount_minor: int, account_ref: str | None = None, account_number_ref: str | None = None
+    ) -> BankTxn:
+        """Request an incoming credit and wait for it. Slow on the sandbox (~2 minutes), which is why
+        the live demo hands out pre-funded spaces from the pool (fern.pool) instead."""
+        if not account_ref or not account_number_ref:
+            raise BankRejected("this space has no Column bank account")
+        before = frozenset(t["id"] for t in await self._incoming_credits(account_ref))
+        await self.request_incoming_credit(amount_minor, account_ref, account_number_ref)
         for _ in range(48):
-            new = [t for t in await self._incoming_credits(account_ref) if t["id"] not in before]
-            if new:
-                t = new[0]
-                if t["status"] not in _SETTLED:
-                    await self._request("POST", "/simulate/transfers/ach/settle", json={"ach_transfer_id": t["id"]})
-                    t = await self.get_transfer_raw(t["id"])
-                return BankTxn(t["id"], int(t["amount"]), "incoming", _ts(t.get("settled_at")) or _ts(t["created_at"]))
+            if txn := await self.find_incoming_credit(account_ref, before):
+                return txn
             await asyncio.sleep(5)
         raise BankOutcomeUnknown("simulated payroll did not appear on the account within 4 minutes")
 

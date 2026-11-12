@@ -84,6 +84,11 @@ class Bank(Protocol):
         self, amount_minor: int, account_ref: str | None = None, account_number_ref: str | None = None
     ) -> BankTxn: ...
 
+    # Pre-funding the account pool: request a credit now, pick it up when it has landed.
+    async def request_incoming_credit(self, amount_minor: int, account_ref: str, account_number_ref: str) -> None: ...
+
+    async def find_incoming_credit(self, account_ref: str, exclude: frozenset[str] = frozenset()) -> BankTxn | None: ...
+
     def inject_fault(self, idempotency_key: str, fault: Fault) -> None: ...
 
 
@@ -100,6 +105,7 @@ class SimulatedBank:
     by_key: dict[str, str] = field(default_factory=dict)
     faults: dict[str, Fault] = field(default_factory=dict)
     events: list[BankEvent] = field(default_factory=list)
+    incoming: dict[str, list[BankTxn]] = field(default_factory=dict)
 
     def inject_fault(self, idempotency_key: str, fault: Fault) -> None:
         """Make the next create call with this key fail in the given way."""
@@ -174,9 +180,14 @@ class SimulatedBank:
         """An incoming ACH credit, e.g. payroll, already posted to the account."""
         return BankTxn(f"txn_{uuid4().hex[:16]}", amount_minor, "incoming", _now())
 
+    async def request_incoming_credit(self, amount_minor: int, account_ref: str, account_number_ref: str) -> None:
+        self.incoming.setdefault(account_ref, []).append(await self.receive_payroll(amount_minor))
+
+    async def find_incoming_credit(self, account_ref: str, exclude: frozenset[str] = frozenset()) -> BankTxn | None:
+        return next((t for t in self.incoming.get(account_ref, []) if t.provider_txn_id not in exclude), None)
+
     async def open_account(self, space_id: str) -> tuple[str | None, str | None]:
-        """The simulated bank keeps one shared book; nothing to open."""
-        return None, None
+        return f"sim_acct_{space_id}", f"sim_num_{space_id}"
 
     def _emit(self, bank_transfer_id: str, event_type: str) -> None:
         self.events.append(BankEvent(f"evt_{uuid4().hex[:16]}", bank_transfer_id, event_type))

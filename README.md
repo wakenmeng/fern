@@ -22,7 +22,13 @@ make up        # Postgres in Docker
 make migrate   # apply migrations/*.sql
 make test      # scenario and failure tests
 make dev       # API on http://localhost:8000/docs
+make pool SIZE=60   # pre-fund demo spaces so visitors don't wait for payroll
 ```
+
+Against the Column sandbox, set `FERN_BANK=column` and `FERN_COLUMN_API_KEY` (a `test_` key) in `.env`.
+A simulated payroll takes about 2 minutes to land there, so the live demo pre-funds a pool of spaces
+(`make pool`) and runs with `FERN_POOL_ONLY=true`. `FERN_RUN_COLUMN=1 uv run pytest tests/test_column_live.py`
+runs the five cases on the sandbox and reconciles the ledger against Column's balance.
 
 ## Layout
 
@@ -32,7 +38,9 @@ src/fern/
   ledger.py        double-entry posting with per-effect rules
   bank.py          bank client interface + a Column-like simulated bank with fault injection
   payments.py      the five flows, bank-fact handling, recovery of unknown outcomes
+  column.py        Column sandbox adapter (same interface as the simulator)
   spaces.py        demo spaces (one isolated book per visitor)
+  pool.py          pre-funded pool of spaces, claimed one per visitor
   api.py           FastAPI routes
   platform/        config, database, sessions, idempotency, migrations
 tests/

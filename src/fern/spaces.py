@@ -18,7 +18,10 @@ class NewSpace:
 
 
 async def create_space(
-    conn: AsyncConnection, bank: Bank | None = None, display_name: str = "Jordan Rivera"
+    conn: AsyncConnection,
+    bank: Bank | None = None,
+    display_name: str = "Jordan Rivera",
+    pool_status: str = "claimed",
 ) -> NewSpace:
     space = NewSpace(uuid4(), uuid4(), uuid4())
     # Opening the bank account is idempotent per space id, so a retry reuses the same account.
@@ -26,8 +29,8 @@ async def create_space(
 
     async def work(c: AsyncConnection) -> NewSpace:
         await c.execute(
-            "INSERT INTO spaces (id, bank_account_id, bank_account_number_id) VALUES (%s, %s, %s)",
-            (space.space_id, account_id, account_number_id),
+            "INSERT INTO spaces (id, bank_account_id, bank_account_number_id, pool_status) VALUES (%s, %s, %s, %s)",
+            (space.space_id, account_id, account_number_id, pool_status),
         )
         await c.execute(
             "INSERT INTO customers (id, space_id, kind, display_name) "
@@ -47,3 +50,9 @@ async def create_space(
         return space
 
     return await transaction(conn, work)
+
+
+async def load_space(conn: AsyncConnection, space_id: UUID) -> NewSpace:
+    cur = await conn.execute("SELECT id, kind FROM customers WHERE space_id = %s", (space_id,))
+    ids = {r["kind"]: r["id"] for r in await cur.fetchall()}
+    return NewSpace(space_id, ids["primary"], ids["npc"])

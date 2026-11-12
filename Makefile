@@ -1,4 +1,4 @@
-.PHONY: up down migrate test lint dev
+.PHONY: up down migrate test lint dev pool
 
 up:
 	docker compose up -d --wait
@@ -18,3 +18,8 @@ lint:
 
 dev: migrate
 	uv run uvicorn fern.api:app --reload
+
+# Pre-fund the demo account pool (DESIGN §2.1). Uses FERN_BANK; ~2-3 minutes on Column.
+SIZE ?= 60
+pool: migrate
+	uv run python -m fern.pool --size $(SIZE)
