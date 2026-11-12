@@ -15,6 +15,7 @@ import asyncio
 import time
 from collections.abc import Callable
 from typing import Any
+from uuid import UUID
 
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
@@ -40,6 +41,26 @@ async def claim(conn: AsyncConnection) -> NewSpace | None:
     )
     row = await cur.fetchone()
     return await load_space(conn, row["id"]) if row else None
+
+
+async def existing(conn: AsyncConnection, limit: int = 20) -> list[dict[str, Any]]:
+    """Spaces visitors already use, most recent first. When the pool runs out, a new visitor picks
+    one of these and joins it (the demo is shared, nobody's real money is involved)."""
+    cur = await conn.execute(
+        "SELECT s.id AS space_id, c.display_name, s.claimed_at, "
+        "  (SELECT count(*) FROM transfers t WHERE t.space_id = s.id) AS transfer_count, "
+        "  (SELECT max(t.created_at) FROM transfers t WHERE t.space_id = s.id) AS last_activity_at "
+        "FROM spaces s JOIN customers c ON c.space_id = s.id AND c.kind = 'primary' "
+        "WHERE s.pool_status = 'claimed' "
+        "ORDER BY coalesce(s.claimed_at, s.created_at) DESC LIMIT %s",
+        (limit,),
+    )
+    return await cur.fetchall()
+
+
+async def join(conn: AsyncConnection, space_id: UUID) -> NewSpace | None:
+    cur = await conn.execute("SELECT 1 FROM spaces WHERE id = %s AND pool_status = 'claimed'", (space_id,))
+    return await load_space(conn, space_id) if await cur.fetchone() else None
 
 
 async def provision(

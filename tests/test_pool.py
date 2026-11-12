@@ -57,7 +57,15 @@ async def test_pooled_space_payroll_is_already_at_the_bank(pooled_client, db):
     assert next(x for x in me["customers"] if x["id"] == s["customer_id"])["available_minor"] == 2000_00
     await assert_books_balance(db, s["space_id"])
 
-    # Pool empty and pool_only: the landing page shows "full" instead of a slow space.
-    r = await c.post("/spaces")
-    assert r.status_code == 503
-    assert (await c.get("/pool")).json()["ready"] == 0
+    # Pool empty and pool_only: no new space, but the next visitor can join this one.
+    assert (await c.post("/spaces")).status_code == 503
+    listing = (await c.get("/spaces")).json()
+    assert listing["ready"] == 0
+    assert listing["spaces"][0]["space_id"] == s["space_id"] and listing["spaces"][0]["transfer_count"] == 1
+    joined = (await c.post(f"/spaces/{s['space_id']}/join")).json()
+    assert joined["customer_id"] == s["customer_id"] and joined["token"]
+    me = (await c.get("/me", headers={"Authorization": f"Bearer {joined['token']}"})).json()
+    assert next(x for x in me["customers"] if x["id"] == s["customer_id"])["available_minor"] == 2000_00
+
+    # Unknown spaces can't be joined.
+    assert (await c.post("/spaces/00000000-0000-0000-0000-000000000000/join")).status_code == 404

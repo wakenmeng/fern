@@ -131,13 +131,7 @@ def _routes(app: FastAPI) -> None:
     async def pool_stats(db: Conn) -> dict[str, int]:
         return await pool.stats(db)
 
-    @app.post("/spaces", status_code=201)
-    async def create_space(db: Conn) -> dict[str, Any]:
-        s = await pool.claim(db)
-        if s is None:
-            if app.state.settings.pool_only:
-                raise HTTPException(503, "all demo spaces are taken")
-            s = await spaces.create_space(db, bank)
+    def _session_body(s: spaces.NewSpace) -> dict[str, Any]:
         token = sessions.issue(Session(s.space_id, s.customer_id), app.state.settings.session_secret)
         return {
             "space_id": s.space_id,
@@ -145,6 +139,27 @@ def _routes(app: FastAPI) -> None:
             "npc_customer_id": s.npc_customer_id,
             "token": token,
         }
+
+    @app.get("/spaces")
+    async def list_spaces(db: Conn) -> dict[str, Any]:
+        """Landing page: how many new spaces are left, and existing ones a visitor can join."""
+        return {"ready": (await pool.stats(db))["ready"], "spaces": await pool.existing(db)}
+
+    @app.post("/spaces", status_code=201)
+    async def create_space(db: Conn) -> dict[str, Any]:
+        s = await pool.claim(db)
+        if s is None:
+            if app.state.settings.pool_only:
+                raise HTTPException(503, "no new demo spaces left; join an existing one from GET /spaces")
+            s = await spaces.create_space(db, bank)
+        return _session_body(s)
+
+    @app.post("/spaces/{space_id}/join")
+    async def join_space(space_id: UUID, db: Conn) -> dict[str, Any]:
+        s = await pool.join(db, space_id)
+        if s is None:
+            raise HTTPException(404, "no such space")
+        return _session_body(s)
 
     @app.get("/me")
     async def me(db: Conn, auth: Auth) -> dict[str, Any]:
