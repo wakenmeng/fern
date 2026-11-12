@@ -22,7 +22,7 @@ make up        # Postgres in Docker
 make migrate   # apply migrations/*.sql
 make test      # scenario and failure tests
 make dev       # API on http://localhost:8000/docs
-make pool SIZE=60   # pre-fund demo spaces so visitors don't wait for payroll
+make pool SIZE=5    # pre-fund demo spaces so visitors don't wait for payroll
 ```
 
 Against the Column sandbox, set `FERN_BANK=column` and `FERN_COLUMN_API_KEY` (a `test_` key) in `.env`.

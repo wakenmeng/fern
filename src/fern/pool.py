@@ -5,7 +5,7 @@ for it. Before going live we open N spaces, each with its own Column bank accoun
 payroll credit land on every account. A visitor then claims a ready space, and S1 records the
 credit that is already sitting on the account.
 
-    uv run python -m fern.pool --size 60
+    uv run python -m fern.pool --size 5
 
 Safe to re-run: it tops the pool up to --size and finishes spaces left half-provisioned.
 """
@@ -94,7 +94,7 @@ async def _main() -> None:
     from fern.platform.config import get_settings
 
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--size", type=int, default=60)
+    parser.add_argument("--size", type=int, default=5)
     args = parser.parse_args()
     settings = get_settings()
     bank = make_bank(settings)
