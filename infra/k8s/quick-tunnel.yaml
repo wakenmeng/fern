@@ -1,0 +1,25 @@
+# Fallback public URL while waken.dev's DNS is still moving to Cloudflare: a Cloudflare quick
+# tunnel (random https://*.trycloudflare.com, no account). Same backend as waken.dev/apps/fern.
+#   kubectl --kubeconfig infra/.kubeconfig -n fern apply -f infra/k8s/quick-tunnel.yaml
+#   kubectl --kubeconfig infra/.kubeconfig -n fern logs deploy/quick-tunnel | grep trycloudflare
+# Delete it once waken.dev/apps/fern works. The URL changes whenever the pod restarts.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quick-tunnel
+  namespace: fern
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: quick-tunnel }
+  template:
+    metadata:
+      labels: { app: quick-tunnel }
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2025.4.0
+          args: ["tunnel", "--no-autoupdate", "--url", "http://fern-api.fern.svc:80"]
+          resources:
+            requests: { cpu: 25m, memory: 64Mi }
+            limits: { memory: 128Mi }
