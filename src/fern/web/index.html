@@ -295,6 +295,7 @@ details.tbl table { margin-top: 8px; font-size: 12px; }
   .tl li { grid-template-columns: 54px 1fr; } .tl li .src { display: none; }
   .match { grid-template-columns: 1fr; } .match .mid { text-align: left; }
   table { display: block; overflow-x: auto; }
+  .stages .x { display: none; } .stages td, .stages th { padding-left: 6px; padding-right: 6px; } .stages .chip::before { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
 
@@ -730,7 +731,7 @@ window.addEventListener("hashchange", async () => {
   render(); scrollTo(0, 0);
   const [top] = route();
   if (top === "ops" && SESSION) { await refreshOps(); render(); }
-  if (top === "eng") { await refreshStatus(); render(); }
+  if (top === "eng") { await Promise.all([refreshStatus(), refreshBench()]); render(); }
 });
 
 // ================================================================== demo: the app and its trace
@@ -1125,7 +1126,71 @@ function engArch() {
     <div class="card pad"><h2 class="t">Components</h2><table><tr><th>Component</th><th>Detail</th><th>Status</th><th>Now</th></tr>
       ${rows.map(([n, d, ok, now]) => `<tr><td>${n}</td><td class="muted">${d}</td><td>${ok ? `<span class="chip c-green">Up</span>` : ok === null ? `<span class="chip c-grey">n/a</span>` : `<span class="chip c-red">Down</span>`}</td><td class="mono">${now}</td></tr>`).join("")}</table></div>`;
 }
+// The latest in-cluster load test (bench/load.py), shipped as bench.json. Sample numbers until one exists.
+async function refreshBench() {
+  if (S.bench !== undefined) return;
+  const r = await call("GET", "bench.json");
+  S.bench = r.status === 200 && r.data && r.data.headline ? r.data : null;
+}
+function benchBuckets(series, max = 90) {
+  // One point per second is too dense for a 360px chart: average into at most `max` buckets.
+  const k = Math.max(1, Math.ceil(series.length / max)), out = [];
+  for (let i = 0; i < series.length; i += k) {
+    const g = series.slice(i, i + k), avg = f => g.reduce((a, x) => a + (x[f] || 0), 0) / g.length;
+    out.push({ t: g[0].t, rps: avg("rps"), p50: avg("p50"), p95: avg("p95"), vus: Math.max(...g.map(x => x.vus || 0)), errors: g.reduce((a, x) => a + (x.errors || 0), 0) });
+  }
+  return out;
+}
 function engBench() {
+  const b = S.bench;
+  if (b === undefined) return `<div class="card pad"><div class="empty">Loading the latest run…</div></div>`;
+  if (!b) return engBenchSample();
+  const h = b.headline, m = b.money, me = b.method || {}, pts = benchBuckets(b.series || []);
+  const lab = pts.map(p => { const t = Math.round(p.t); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; });
+  const n = x => Number(x).toLocaleString("en-US");
+  const msf = v => v >= 100 ? v.toFixed(0) : v.toFixed(1);
+  const stages = (me.stages || []).map(s => `${s.vus} users for ${s.seconds} s`).join(" → ");
+  const mix = Object.entries(me.mix || {}).map(([k, v]) => `${v}% ${k}`).join(" · ");
+  // [title, value, description, passed]; checks the file doesn't carry are left out, not shown as failures.
+  const checks = [
+    ["Duplicate transfers", m.duplicate_transfers, "replayed requests (same Idempotency-Key) created nothing new", m.duplicate_transfers === 0],
+    ["Balances vs the reference model", `${n(m.balances_exact)} / ${n(m.spaces)}`, "every space's balance matches what its accepted requests imply", m.balances_exact === m.spaces],
+    ["Books balance", m.books_balance ? "yes" : "NO", "debits equal credits in every space", m.books_balance],
+    ["Nothing left held", `${n(m.nothing_held)} / ${n(m.spaces)}`, "no hold or restriction stuck after the run", m.nothing_held === m.spaces, m.nothing_held === undefined],
+    ["Negative balances", m.non_negative ? "0" : "found", "nobody spent more than their available balance", m.non_negative],
+  ].filter(c => !c[4]);
+  // The step test: one row per load level. "Sustained" is the busiest stage within the p95 SLO with no errors.
+  const slo = me.slo_p95_ms, st = b.stages || [], maxRps = Math.max(1, ...st.map(s => s.rps));
+  const stageCard = st.length ? `<div class="card pad"><h2 class="t">Step test</h2>
+      <p class="muted small" style="margin:0 0 6px">${st.length} stages of ${st[0].seconds} s each, adding users at every step.${slo ? ` A stage is within the target when p95 ≤ ${slo} ms with no errors.` : ""}</p>
+      <table class="stages"><tr><th>Users</th><th>Throughput (req/s)</th><th class="num x">p50</th><th class="num">p95</th><th class="num x">p99</th><th class="num x">Errors</th><th></th></tr>
+      ${st.map(s => { const within = slo ? s.p95_ms <= slo && !s.errors : null, top = s.vus === h.sustained_vus;
+        return `<tr><td class="mono"><b>${n(s.vus)}</b></td>
+          <td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;max-width:220px;height:8px;border-radius:4px;background:var(--surface-2)"><div style="width:${(s.rps / maxRps * 100).toFixed(1)}%;height:100%;border-radius:4px;background:${within === false ? "var(--amber)" : "var(--fern)"}"></div></div><span class="mono">${msf(s.rps)}</span></div></td>
+          <td class="num x">${msf(s.p50_ms)}</td><td class="num">${msf(s.p95_ms)}</td><td class="num x">${msf(s.p99_ms)}</td><td class="num x">${n(s.errors)}</td>
+          <td>${within === null ? "" : top ? `<span class="chip c-green">Capacity</span>` : within ? `<span class="chip c-green flat">within</span>` : `<span class="chip c-amber">over target</span>`}</td></tr>`; }).join("")}</table>
+      ${me.note ? `<div class="anno" style="margin-top:14px"><b>Bottleneck.</b> ${esc(me.note)}</div>` : ""}</div>` : "";
+  const codes = Object.entries(b.status_codes || {}).sort();
+  return `<div class="anno">Run ${esc(new Date(b.run_at).toLocaleString())} · <b>in-cluster, bank simulated</b>: the load runs as a Job inside EKS against a separate copy of the API with the in-process bank, so it measures Fern's API, Postgres and Redis, not Column.</div>
+    <div class="grid g4">${[["Peak throughput", `${msf(h.peak_rps_10s)} req/s`, "best 10-second average"], ["Capacity", `${msf(h.sustained_rps)} req/s`, `${h.sustained_vus ? `at ${n(h.sustained_vus)} users · ` : ""}p95 ${msf(h.sustained_p95_ms)} ms${slo ? ` (target ≤ ${slo})` : ""}`],
+      ["Concurrent users", n(h.peak_vus), `${n(h.requests)} requests · ${(h.error_rate * 100).toFixed(2)}% errors`], ["Money errors", n(m.money_errors), `${n(m.transfers)} transfers · ${n(m.spaces)} spaces checked`]]
+      .map(([l, v, s], i) => `<div class="card stat ${i === 3 && m.money_errors === 0 ? "good" : i === 3 ? "warn" : ""}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("")}</div>
+    ${stageCard}
+    ${pts.length > 1 ? `<div class="grid g3">
+      <div class="card pad">${lineChart("bt-rps", { title: "Throughput (req/s)", labels: lab, unit: "elapsed", height: 220, width: 360, fmtv: v => v.toFixed(0), series: [{ name: "req/s", color: "var(--s1)", values: pts.map(p => p.rps) }] })}</div>
+      <div class="card pad">${lineChart("bt-vus", { title: "Concurrent virtual users", labels: lab, unit: "elapsed", height: 220, width: 360, fmtv: v => v.toFixed(0), series: [{ name: "VUs", color: "var(--s2)", values: pts.map(p => p.vus) }] })}</div>
+      <div class="card pad">${lineChart("bt-lat", { title: "Latency (ms)", labels: lab, unit: "elapsed", height: 220, width: 360, fmtv: v => v.toFixed(0), series: [{ name: "p50", color: "var(--s1)", values: pts.map(p => p.p50) }, { name: "p95", color: "var(--s2)", values: pts.map(p => p.p95) }] })}</div></div>` : ""}
+    <div class="grid g2">
+      <div class="card pad"><h2 class="t">By endpoint</h2><table><tr><th>Endpoint</th><th class="num">Requests</th><th class="num">p50</th><th class="num">p95</th><th class="num">p99</th></tr>
+        ${(b.endpoints || []).map(e => `<tr><td class="mono small">${esc(e.name)}</td><td class="num">${n(e.count)}</td><td class="num">${msf(e.p50)}</td><td class="num">${msf(e.p95)}</td><td class="num">${msf(e.p99)}</td></tr>`).join("")}</table>
+        <p class="faint small" style="margin:10px 0 0">Milliseconds over the whole run. Overall p50 ${msf(h.p50_ms)} · p95 ${msf(h.p95_ms)} · p99 ${msf(h.p99_ms)}. Status codes: ${codes.map(([c, k]) => `${c} × ${n(k)}`).join(", ")}.</p></div>
+      <div class="card pad"><h2 class="t">Money after the run</h2><p class="muted small" style="margin:0 0 6px">After the load stops, every space is checked against a model of the requests it accepted.</p>
+        ${checks.map(([t, v, d, ok]) => `<div class="check"><span class="ok ${ok ? "" : "bad"}">${ok ? "✓" : "✕"}</span><div style="flex:1"><div>${t}</div><div class="faint small">${d}</div></div><b class="mono">${v}</b></div>`).join("")}</div></div>
+    <div class="card pad"><h2 class="t">Method</h2><table>
+      ${[["Where", me.where], ["Bank", me.bank], ["Database", me.database], ["Load", stages], ["Think time", me.think_time_s ? `${me.think_time_s[0]}–${me.think_time_s[1]} s between requests` : ""], ["Mix", mix], ["API replicas", me.api_replicas], ["Load generator", me.load_processes ? `${me.load_processes} processes` : ""]]
+        .filter(([, v]) => v !== undefined && v !== "").map(([k, v]) => `<tr><td class="faint" style="width:140px">${k}</td><td class="muted">${esc(v)}</td></tr>`).join("")}</table></div>`;
+}
+function engBenchSample() {
   const r = rng(3), N = 32, lab = Array.from({ length: N }, (_, i) => `${Math.floor(i / 2)}:${i % 2 ? "30" : "00"}`);
   const target = i => i < 10 ? i * 40 : i < 26 ? 400 : i < 28 ? 800 : Math.max(0, 400 - (i - 28) * 130);
   const rps = lab.map((_, i) => target(i) * (0.97 + r() * 0.04));
@@ -1135,7 +1200,7 @@ function engBench() {
   const p99 = lab.map((_, i) => { const t = target(i); return t >= 800 ? 390 + r() * 60 : 52 + t / 400 * 60 + r() * 12; });
   const eps = [["GET /me", "read", "55%", 9, 21, 38], ["POST /p2p", "write", "25%", 14, 38, 71], ["POST /withdrawals", "write + bank", "10%", 22, 57, 112], ["POST /webhooks/sim", "bank event", "10%", 6, 15, 29]];
   const asserts = [["Duplicate payouts", "0", "no transfer was sent to the bank twice"], ["Overdrafts", "0", "nobody spent more than their available balance"], ["Unbalanced journals", "0", "every journal's debits equal its credits"], ["Balances vs the reference model", "0 diffs", "checked account by account after the run"]];
-  return `${SAMPLE("Sample numbers. The layout and method are final; the figures are placeholders until the load test runs against the live environment.")}
+  return `${SAMPLE("Sample numbers: no load test result is in this build yet (bench.json missing).")}
     <div class="grid g4">${[["Peak throughput", "806 req/s", "1-minute spike, no 5xx"], ["Sustained", "400 req/s", "8 minutes at p95 58 ms"], ["Concurrent users", "1,000", "virtual users at peak"], ["Money errors", "0", "duplicates · overdrafts · unbalanced"]]
       .map(([l, v, s], i) => `<div class="card stat ${i === 3 ? "good" : ""}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("")}</div>
     <div class="grid g3">
@@ -1288,7 +1353,7 @@ async function submitSheet() {
 })();
 
 render();
-boot().then(async () => { const [top] = route(); if (top === "eng" || top === "") { await refreshStatus(); render(); } });
+boot().then(async () => { const [top] = route(); if (top === "eng" || top === "") { await Promise.all([refreshStatus(), refreshBench()]); render(); } });
 </script>
 </body>
 </html>
