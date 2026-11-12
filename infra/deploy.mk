@@ -12,7 +12,7 @@ K          := kubectl --kubeconfig $(KCFG) -n fern
 TAG        ?= $(shell git rev-parse --short HEAD)
 IMG         = $$($(TFD) output -raw ecr_repository_url):$(TAG)
 
-.PHONY: infra-up infra-down kubeconfig image k8s-secret k8s-migrate k8s-apply k8s-pool deploy k8s-status
+.PHONY: infra-up infra-down kubeconfig image k8s-secret k8s-migrate k8s-apply k8s-pool deploy k8s-status tunnel bench
 
 infra-up:  ## VPC, EKS, RDS, Redis, ECR (about 15-20 minutes)
 	$(TFD) init -input=false
@@ -66,6 +66,29 @@ deploy: image k8s-secret k8s-migrate k8s-apply  ## build, push, migrate, roll ou
 
 k8s-status:
 	$(K) get pods,jobs,svc
+
+# Load test (about 8 minutes): a sim-bank copy of the API on its own database, driven by
+# bench/load.py from inside the cluster. Result: bench/results/latest.json. Everything is removed after.
+BENCH_STAGES ?= 30:50,240:200,60:400,30:50
+bench:
+	@url=$$($(TFD) output -raw database_url | sed 's#/fern?sslmode#/fern_bench?sslmode#'); \
+	$(K) create secret generic fern-bench-env --from-literal=FERN_DATABASE_URL="$$url" \
+	  --dry-run=client -o yaml | $(K) apply -f - >/dev/null
+	$(K) delete job fern-bench-db fern-bench-load --ignore-not-found
+	sed "s#image: IMAGE#image: $(IMG)#" infra/k8s/job-bench-db.yaml | $(K) apply -f -
+	$(K) wait --for=condition=complete job/fern-bench-db --timeout=300s
+	sed "s#image: IMAGE#image: $(IMG)#" infra/k8s/bench-api.yaml | $(K) apply -f -
+	$(K) rollout status deployment/fern-bench --timeout=300s
+	$(K) create configmap fern-bench-script --from-file=bench/load.py --dry-run=client -o yaml | $(K) apply -f -
+	sed -e "s#image: IMAGE#image: $(IMG)#" -e 's#args: \[\]#args: ["--stages", "$(BENCH_STAGES)"]#' \
+	  infra/k8s/job-bench-load.yaml | $(K) apply -f -
+	$(K) wait --for=condition=complete job/fern-bench-load --timeout=1800s
+	@mkdir -p bench/results
+	$(K) logs job/fern-bench-load | sed -n '/^BENCH_JSON_BEGIN$$/,/^BENCH_JSON_END$$/p' | sed '1d;$$d' \
+	  | python3 -m json.tool > bench/results/latest.json
+	@cp bench/results/latest.json bench/results/$$(date -u +%Y%m%dT%H%MZ).json
+	$(K) delete deployment/fern-bench service/fern-bench job/fern-bench-load job/fern-bench-db --ignore-not-found
+	@python3 -c "import json; r=json.load(open('bench/results/latest.json')); print(r['headline']); print(r['money'])"
 
 # Cloudflare Tunnel via the CLI (after `cloudflared tunnel login`): create "fern" once, point
 # fern-origin.waken.dev at it, and store its connector token in .env.deploy.

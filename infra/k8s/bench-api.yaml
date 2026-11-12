@@ -1,0 +1,58 @@
+# Load-test target: the same image as fern-api, but with the simulated bank, on-demand spaces and
+# its own database (fern_bench), so a load test never touches the Column sandbox or the live pool.
+# `make bench` applies this, runs bench/load.py as a Job, saves the JSON, then deletes it all.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fern-bench
+  namespace: fern
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: fern-bench }
+  template:
+    metadata:
+      labels: { app: fern-bench }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: fern-bench }
+      containers:
+        - name: api
+          image: IMAGE
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef: { name: fern-env }
+            - secretRef: { name: fern-bench-env }  # FERN_DATABASE_URL for fern_bench overrides fern-env
+          env:
+            - { name: FERN_ENV, value: aws }
+            - { name: FERN_BANK, value: sim }
+            - { name: FERN_PLAID, value: sim }
+            - { name: FERN_POOL_ONLY, value: "false" }
+            - { name: FERN_RATE_LIMIT_PER_MINUTE, value: "600" }
+            - { name: FERN_OPENAI_API_KEY, value: "" }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fern-bench
+  namespace: fern
+spec:
+  selector: { app: fern-bench }
+  ports:
+    - port: 80
+      targetPort: 8000

@@ -1,0 +1,31 @@
+# Runs bench/load.py (mounted from the fern-bench-script ConfigMap) against fern-bench.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fern-bench-load
+  namespace: fern
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      affinity:  # keep the load generator off the nodes' busiest pod where possible
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: { app: fern-bench }
+      containers:
+        - name: load
+          image: IMAGE
+          command: ["python", "/bench/load.py", "--base", "http://fern-bench.fern.svc", "--out", "/tmp/bench.json"]
+          args: []
+          volumeMounts:
+            - { name: script, mountPath: /bench }
+          resources:
+            requests: { cpu: 500m, memory: 256Mi }
+      volumes:
+        - name: script
+          configMap: { name: fern-bench-script }

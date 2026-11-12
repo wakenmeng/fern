@@ -1,0 +1,32 @@
+# Creates the fern_bench database (if missing) and applies the migrations to it.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fern-bench-db
+  namespace: fern
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: db
+          image: IMAGE
+          command:
+            - python
+            - -c
+            - |
+              import os, psycopg
+              from fern.platform.migrate import migrate
+              admin, bench = os.environ["ADMIN_URL"], os.environ["FERN_DATABASE_URL"]
+              with psycopg.connect(admin, autocommit=True) as c:
+                  if not c.execute("SELECT 1 FROM pg_database WHERE datname = 'fern_bench'").fetchone():
+                      c.execute("CREATE DATABASE fern_bench")
+              migrate(bench)
+              print("fern_bench ready")
+          envFrom:
+            - secretRef: { name: fern-bench-env }
+          env:
+            - name: ADMIN_URL
+              valueFrom:
+                secretKeyRef: { name: fern-env, key: FERN_DATABASE_URL }
