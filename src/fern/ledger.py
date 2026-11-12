@@ -14,6 +14,8 @@ from uuid import UUID, uuid4
 
 from psycopg import AsyncConnection
 
+from fern.platform import tracing
+
 # Normal side of each account role. Customer deposits are liabilities (credit-normal).
 NORMAL_SIDE = {
     "bank": "D",
@@ -112,7 +114,20 @@ async def post(conn: AsyncConnection, space_id: UUID, entries: list[Entry]) -> N
 
     accounts = await lock_accounts(conn, space_id, [a for e in new for a in (e.debit_account_id, e.credit_account_id)])
     for e in new:
-        await _post_one(conn, space_id, e, accounts)
+        debit, credit = accounts.get(e.debit_account_id, {}), accounts.get(e.credit_account_id, {})
+        attrs = {
+            "ledger.effect": e.effect,
+            "ledger.amount_minor": e.amount_minor,
+            "ledger.debit": debit.get("role"),
+            "ledger.credit": credit.get("role"),
+            "ledger.dedupe_key": e.dedupe_key,
+        }
+        # Customer accounts share a role; the id tells the UI whose deposit it is.
+        for side, acct in (("debit", debit), ("credit", credit)):
+            if acct.get("customer_id"):
+                attrs[f"ledger.{side}_customer_id"] = str(acct["customer_id"])
+        with tracing.span(None, f"ledger.post {e.effect}", **attrs):
+            await _post_one(conn, space_id, e, accounts)
 
 
 async def _post_one(conn: AsyncConnection, space_id: UUID, e: Entry, accounts: dict[UUID, dict]) -> None:

@@ -4,8 +4,26 @@
     {
       "name": "prototype",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "design/prototype"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--directory",
+        "design/prototype"
+      ],
       "port": 8765
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": [
+        "run",
+        "uvicorn",
+        "fern.api:app",
+        "--port",
+        "8010"
+      ],
+      "port": 8010
     }
   ]
 }

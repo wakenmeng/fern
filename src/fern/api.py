@@ -9,15 +9,16 @@ selects the in-process simulator ("sim") or the Column sandbox ("column").
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from psycopg import AsyncConnection
 from pydantic import BaseModel, Field
 
-from fern import ledger, ops_api, payments, pool, spaces
+from fern import ai, ledger, ops_api, payments, pool, spaces, status
 from fern.bank import Bank, BankEvent, BankTxn, SimulatedBank
 from fern.column import ColumnBank
 from fern.plaid import PlaidClient, SimulatedPlaid, SourceAccount
@@ -30,6 +31,7 @@ from fern.platform.ratelimit import RateLimiter
 from fern.platform.session import Session
 
 SIMULATED_APPROVER = "ops:simulated-approver"
+WEB = Path(__file__).parent / "web"
 
 
 def make_bank(settings: Settings) -> Bank:
@@ -51,11 +53,17 @@ def create_app(settings: Settings | None = None, bank: Bank | None = None) -> Fa
     async def lifespan(app: FastAPI):
         app.state.pool = create_pool(settings.database_url)
         await app.state.pool.open()
+        # Traces are saved while the request still holds its own connection (the dependency exits
+        # after the response), so they get a separate small pool: with one shared pool, 20 requests
+        # in flight would each hold a connection and wait for a second one forever.
+        app.state.trace_pool = create_pool(settings.database_url, max_size=4)
+        await app.state.trace_pool.open()
         app.state.limiter = (
             RateLimiter(settings.redis_url, settings.rate_limit_per_minute) if settings.redis_url else None
         )
         yield
         await app.state.pool.close()
+        await app.state.trace_pool.close()
         for client in (app.state.bank, app.state.source, app.state.limiter):
             if hasattr(client, "aclose"):
                 await client.aclose()
@@ -84,7 +92,7 @@ def create_app(settings: Settings | None = None, bank: Bank | None = None) -> Fa
                 tr.root.status = "error"
         response.headers["X-Trace-Id"] = tr.id
         if tr.space_id is not None:
-            async with app.state.pool.connection() as c:
+            async with app.state.trace_pool.connection() as c:
                 await tracing.save(c, tr)
         return response
 
@@ -170,9 +178,33 @@ class ReturnRequest(BaseModel):
 def _routes(app: FastAPI) -> None:
     bank: Bank = app.state.bank
 
+    @app.get("/", include_in_schema=False)
+    async def index() -> FileResponse:
+        # The demo UI: one HTML file that calls this API with relative paths (FRONTEND §7).
+        return FileResponse(WEB / "index.html", headers={"Cache-Control": "no-cache"})
+
+    @app.get("/bench.json", include_in_schema=False)
+    async def bench() -> FileResponse:
+        # Results of the in-cluster load test (bench/), shipped with the image. 404 until a run exists.
+        path = WEB / "bench.json"
+        if not path.is_file():
+            raise HTTPException(404, "no benchmark run yet")
+        return FileResponse(path, headers={"Cache-Control": "no-cache"})
+
     @app.get("/healthz")
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/status")
+    async def live_status(request: Request, db: Conn) -> dict[str, Any]:
+        """Dependency health now, and latency per service over the last hour (Engineering page)."""
+        ai_settings = ai.AISettings()
+        config = {
+            "bank": bank.provider,
+            "plaid": app.state.settings.plaid,
+            "ai": ai_settings.ai_model if ai_settings.openai_api_key else "rules (no API key)",
+        }
+        return await status.collect(db, request.app.state.limiter, config)
 
     @app.get("/pool")
     async def pool_stats(db: Conn) -> dict[str, int]:
@@ -218,7 +250,25 @@ def _routes(app: FastAPI) -> None:
         people = []
         for c in await cur.fetchall():
             people.append({**c, **await payments.balances(db, auth.space_id, c["id"])})
-        return {"space_id": auth.space_id, "customer_id": auth.customer_id, "customers": people}
+        return {
+            "space_id": auth.space_id,
+            "customer_id": auth.customer_id,
+            "customers": people,
+            "bank": bank.provider,
+        }
+
+    @app.get("/transfers")
+    async def transfers(db: Conn, auth: Auth) -> dict[str, Any]:
+        """The space's transfers, newest first, with the names of their events (the activity list)."""
+        cur = await db.execute(
+            "SELECT t.id, t.kind, t.status, t.amount_minor, t.from_customer_id, t.to_customer_id, "
+            "t.counterparty_name, t.bank_transfer_id, t.return_code, t.failure_reason, t.created_at, "
+            "coalesce((SELECT array_agg(e.event ORDER BY e.id) FROM transfer_events e "
+            "WHERE e.transfer_id = t.id), '{}') AS events "
+            "FROM transfers t WHERE t.space_id = %s ORDER BY t.created_at DESC LIMIT 50",
+            (auth.space_id,),
+        )
+        return {"transfers": await cur.fetchall()}
 
     # S1
     @app.post("/demo/payroll", status_code=201)

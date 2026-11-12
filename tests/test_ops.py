@@ -90,17 +90,17 @@ async def test_report_without_api_key_is_rule_based(client, monkeypatch):
     assert (await client.get("/ops/reports/latest", headers=s["h"])).json()["id"] == r["id"]
 
 
-class FakeClaude:
-    """Stands in for AsyncAnthropic: records the request, returns a schema-valid report."""
+class FakeOpenAI:
+    """Stands in for AsyncOpenAI: records the request, returns a schema-valid report."""
 
-    def __init__(self, stop_reason: str = "end_turn"):
+    def __init__(self, status: str = "completed", refuse: bool = False):
         self.calls: list[dict] = []
-        self.stop_reason = stop_reason
-        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._create))
+        self.status, self.refuse = status, refuse
+        self.responses = SimpleNamespace(create=self._create)
 
     async def _create(self, **kw):
         self.calls.append(kw)
-        facts = json.loads(kw["messages"][0]["content"].split("\n\n", 1)[1])
+        facts = json.loads(kw["input"].split("\n\n", 1)[1])
         returned = [t["id"] for t in facts["transfers"] if t["status"] == "returned"]
         report = {
             "headline": "One returned pull",
@@ -108,44 +108,49 @@ class FakeClaude:
             "findings": [{"severity": "warning", "title": "Return", "detail": "R10", "transfer_ids": returned}],
             "actions": [{"owner": "ops", "action": "Contact the customer."}],
         }
+        part = SimpleNamespace(type="refusal", refusal="no") if self.refuse else SimpleNamespace(type="output_text")
         return SimpleNamespace(
-            model=kw["model"],
-            stop_reason=self.stop_reason,
+            model=f"{kw['model']}-2025-08-07",
+            status=self.status,
+            incomplete_details=SimpleNamespace(reason="max_output_tokens") if self.status == "incomplete" else None,
             usage=SimpleNamespace(input_tokens=2000, output_tokens=500),
-            content=[SimpleNamespace(type="text", text=json.dumps(report))],
+            output=[SimpleNamespace(type="message", content=[part])],
+            output_text="" if self.refuse else json.dumps(report),
         )
 
 
-async def test_claude_report_cites_transfers_and_records_cost(client):
+async def test_llm_report_cites_transfers_and_records_cost(client):
     s = await space(client)
     await client.post("/demo/payroll", json={"amount_minor": 1000_00}, headers=s["h"])
     pull = (await client.post("/pulls", json={"amount_minor": 100_00}, headers=s["k"]("p1"))).json()
     await client.post(f"/demo/transfers/{pull['id']}/return", json={"return_code": "R10"}, headers=s["h"])
 
-    fake = FakeClaude()
-    settings = ai.AISettings(anthropic_api_key="test", ai_daily_budget_usd=100)
+    fake = FakeOpenAI()
+    settings = ai.AISettings(openai_api_key="test", ai_daily_budget_usd=100)
     async with client.app.state.pool.connection() as db:
         r = await ai.generate(db, s["space_id"], client=fake, settings=settings)
 
-    assert r["source"] == "claude" and r["status"] == "done"
+    assert r["source"] == "openai" and r["status"] == "done"
     assert r["content"]["findings"][0]["transfer_ids"] == [pull["id"]]
-    assert r["cost_micros"] == 2000 * 4 + 500 * 20  # $4 / $20 per million tokens
+    assert r["cost_micros"] == 2000 * 5 + 500 * 30  # gpt-5.5: $5 / $30 per million tokens
     call = fake.calls[0]
-    assert call["model"] == "claude-opus-5-5" and call["fallbacks"] == "default"
-    assert call["output_config"]["format"]["type"] == "json_schema"
+    assert call["model"] == "gpt-5.5" and call["max_output_tokens"] == ai.MAX_TOKENS
+    assert call["text"]["format"]["type"] == "json_schema" and call["text"]["format"]["strict"] is True
 
 
 async def test_budget_cap_and_refusal_fall_back_to_rules(client):
     s = await space(client)
     async with client.app.state.pool.connection() as db:
-        broke = ai.AISettings(anthropic_api_key="test", ai_daily_budget_usd=0.0)
-        r = await ai.generate(db, s["space_id"], client=FakeClaude(), settings=broke)
+        broke = ai.AISettings(openai_api_key="test", ai_daily_budget_usd=0.0)
+        r = await ai.generate(db, s["space_id"], client=FakeOpenAI(), settings=broke)
         assert r["source"] == "rules" and "budget" in r["content"]["summary"]
 
-        rich = ai.AISettings(anthropic_api_key="test", ai_daily_budget_usd=100)
-        r = await ai.generate(db, s["space_id"], client=FakeClaude(stop_reason="refusal"), settings=rich)
-        assert r["source"] == "rules" and "Claude unavailable" in r["content"]["summary"]
+        rich = ai.AISettings(openai_api_key="test", ai_daily_budget_usd=100)
+        r = await ai.generate(db, s["space_id"], client=FakeOpenAI(refuse=True), settings=rich)
+        assert r["source"] == "rules" and "refused" in r["content"]["summary"]
+        r = await ai.generate(db, s["space_id"], client=FakeOpenAI(status="incomplete"), settings=rich)
+        assert r["source"] == "rules" and "max_output_tokens" in r["content"]["summary"]
         cur = await db.execute(
-            "SELECT status, cost_micros FROM ai_reports WHERE source = 'claude' AND space_id = %s", (s["space_id"],)
+            "SELECT status, cost_micros FROM ai_reports WHERE source = 'openai' AND space_id = %s", (s["space_id"],)
         )
-        assert [dict(x) for x in await cur.fetchall()] == [{"status": "failed", "cost_micros": 0}]
+        assert [dict(x) for x in await cur.fetchall()] == [{"status": "failed", "cost_micros": 0}] * 2

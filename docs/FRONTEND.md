@@ -1,6 +1,7 @@
 # Fern 前端设计
 
-> 状态：v0.3 · 2026-11-11 · 配套原型：`design/prototype/index.html`（本地预览：`python3 -m http.server 8765 --directory design/prototype`）
+> 状态：v0.4 · 2026-11-12 · 线上页面：`src/fern/web/index.html`，由 API 在 `/` 提供（本地：`uv run uvicorn fern.api:app --port 8010`，打开 http://localhost:8010/）。原型 `design/prototype/index.html` 保留作设计参考。
+> v0.4：页面接上真实 API。Trace、Operations、架构页的节点状态和第三方延迟都是真数据；只有 Benchmark 还是示例数字。
 > v0.3：按「一分钟讲完」重做信息架构。首页就是 Demo，每个操作都产生一条 Trace；Engineering 只留 Architecture、Benchmark、API 三页；Operations 合成一页。
 > 原则同后端：只服务 5 个场景（S1–S5）和常见故障，不做多余的东西。
 
@@ -8,8 +9,8 @@
 
 ## 1. 演示脚本（一分钟）
 
-1. **Demo**：一句话介绍 Fern，以及接入了哪些服务（Column、Plaid、Claude、AWS）。点 S1–S5，右边出现 Trace：经过哪些节点、每条 SQL、每次银行调用、记了哪几笔账。重点讲 S4：Column 超时后钱一直被 hold 住，恢复任务用同一个幂等键确认，不会重复打款。
-2. **Engineering → Architecture**：AWS 架构图，带每个节点的状态；上次请求经过的节点会被描边标出。下面是第三方服务监控：Column、Plaid、Claude 的延迟、错误率和调用量。
+1. **Demo**：一句话介绍 Fern，以及接入了哪些服务（Column、Plaid、OpenAI、AWS）。点 S1–S5，右边出现 Trace：经过哪些节点、每条 SQL、每次银行调用、记了哪几笔账。重点讲 S4：Column 超时后钱一直被 hold 住，恢复任务用同一个幂等键确认，不会重复打款。
+2. **Engineering → Architecture**：AWS 架构图，带每个节点的状态；上次请求经过的节点会被描边标出。下面是第三方服务监控：Column、Plaid、OpenAI 的延迟、错误率和调用量。
 3. **Engineering → Benchmark**：峰值吞吐、持续吞吐、并发用户数，以及「压测后零资金错误」，还有历次压测记录。
 4. **Engineering → API**：接口文档，可以直接 Try it，并跳到这次调用的 Trace。
 
@@ -37,7 +38,7 @@ Operations 是备用页，被问到「内部怎么运营」时再打开。
 
 - **Trace 列表**：最近的 trace 排成一行胶囊，标签为 `S1`–`S5` 或 `Ops`，显示标题和耗时，点击即可切换。
 - **头部**：入口（如 `POST /v1/withdrawals`）、状态码、总耗时、span 数、服务数、trace id。
-- **服务节点图**：调用方 → Cloudflare → ALB → fern-api / fern-worker → Postgres、Redis → Column、Plaid、Claude，按 Cloudflare / AWS VPC / 第三方分组。本次经过的节点和连线会点亮，连线上标出调用次数（如「12 queries」）；出错的连线标红并写「timed out」。新 trace 出现时，有小圆点按 span 顺序沿连线流动（`prefers-reduced-motion` 时不播放）。
+- **服务节点图**：调用方 → Cloudflare → ALB → fern-api / fern-worker → Postgres、Redis → Column、Plaid、OpenAI，按 Cloudflare / AWS VPC / 第三方分组。本次经过的节点和连线会点亮，连线上标出调用次数（如「12 queries」）；出错的连线标红并写「timed out」。新 trace 出现时，有小圆点按 span 顺序沿连线流动（`prefers-reduced-motion` 时不播放）。
 - **瀑布图**：每行包含服务、操作和时间条。数据库事务默认折叠为一行（`db.tx request_withdrawal · 7 SQL`），可以展开看每条语句。出错的 span 标红。
 - **Span 详情**：SQL 原文（带高亮）、银行请求体和幂等键、全部属性（如 `column.status`、`lock.order`、`why`）。默认选中最值得看的 span：先选出错的，其次第三方调用，再次事务。
 - **记账结果**：本次 trace 产生的分录（效果、借方、贷方、金额）、操作后的余额和可用余额，以及不变量检查。没有记账时说明原因，例如「结果未知，只有 hold，等同键重试确认」。
@@ -59,7 +60,7 @@ Operations 是备用页，被问到「内部怎么运营」时再打开。
 | S5 Chargeback | webhook `returned` | api → Column、Postgres | 只有退回能把余额记成负数；trace 中注明 R10 来自模拟器 |
 | S5 销账 | `POST /v1/ops/write-offs`、`.../approve` | api → Postgres | 由 CHECK 约束强制两人审批 |
 | 对账 | 任务 `reconcile` | worker → Column、Postgres | 只读，只产生差异记录 |
-| AI 日报 | `POST /v1/ops/reports` | api → Redis、Claude、Postgres | 先在 Redis 预占预算 → 规划 → 只读工具 → 起草 → 按实际用量结算 |
+| AI 日报 | `POST /v1/ops/reports` | api → Postgres、OpenAI | 只读查询收集事实 → 在 Postgres 里预占当日预算 → 一次 Responses API 调用（strict JSON schema）→ 按实际用量结算；拒答或被截断时改写规则报告 |
 
 ---
 
@@ -69,10 +70,12 @@ Operations 是备用页，被问到「内部怎么运营」时再打开。
 
 | 数据 | 线上来源 |
 |---|---|
+| 账户、活动、Operations | `GET /me`、`GET /transfers`、`GET /transfers/{id}`、`GET /ops/summary`、`GET /ops/reports/latest` |
 | Trace | 已实现（`src/fern/platform/tracing.py`）：每个改动状态的请求在进程内记录 span，按 space 存进 `traces` 表；响应头带 `X-Trace-Id`，前端用 `GET /traces/{id}` 取回。字段和 OpenTelemetry 一致，以后可以再导出到 OTLP |
-| 节点状态 | CloudWatch（ALB、RDS、ElastiCache）、Kubernetes API（Pod 状态）、Prometheus（应用指标） |
-| 第三方监控 | 应用自己的出站调用直方图 `fern_bank_call_duration_seconds` 等，按 provider 分组 |
-| 压测 | k6 输出的 JSON 汇总 + 参考模型比对结果，作为静态 JSON 随版本发布 |
+| 节点状态 | 已实现：`GET /status`。打开页面时现查 Postgres、Redis；不接 CloudWatch 和 Kubernetes API |
+| 第三方监控 | 已实现：`GET /status` 从最近一小时的 traces 汇总每个服务的调用数、错误数、p50/p95，以及 5 分钟一档的 p95 曲线（所有 space 合计，不含个人数据） |
+| 记账结果 | 已实现：`ledger.post` 每记一笔就生成一个 span，属性里有效果、借贷科目、金额、客户 id |
+| 压测 | **还没做**：页面顶部标着「Sample numbers」 |
 
 ---
 
@@ -89,11 +92,13 @@ Operations 是备用页，被问到「内部怎么运营」时再打开。
 
 ## 7. 技术方案
 
-- React + TypeScript + Vite，单个 SPA，`base: '/apps/fern/'`，打包进 nginx 镜像
-- 所有资金操作带 `Idempotency-Key`，按「操作 + 点击」生成，重试时复用
-- 每次操作后重新拉取 `/v1/me` 和本次请求的 trace；有在途转账时每 2 秒轮询一次
+- 一个 HTML 文件，原生 JS，没有构建步骤；由 FastAPI 在 `/` 提供，随 API 镜像发布，不另开 nginx
+- 所有请求用相对路径（`BASE` 取自页面路径），所以本地 `/` 和线上 `/apps/fern/` 都能用；hash 路由（`#/ops`、`#/eng/api`）
+- 打开页面时 `POST /spaces` 领一个空间，token 存 localStorage；没有新空间时（503）列出可加入的空间
+- 每次点击生成新的 `Idempotency-Key`；请求后用响应头 `X-Trace-Id` 取 trace，再刷新 `/me`、`/transfers`、试算平衡
+- 模拟银行和 Column 走不同的 S5：模拟银行退回已结算的拉款（R10，可变负数）；Column 上发起收款人为 `RETURN_UNAUTH` 的拉款并结算（R29，restriction 吃掉损失）
 - 不引入组件库；服务节点图和瀑布图用 SVG 和 CSS 自己画
-- 72 小时后的静态归档复用同一套组件，数据换成冻结的 JSON 快照（含 trace）
+- 72 小时后的静态归档：同一页面，数据换成冻结的 JSON 快照（还没做）
 
 ---
 
@@ -104,8 +109,8 @@ Operations 是备用页，被问到「内部怎么运营」时再打开。
 | ~~Trace 记录 + `GET /traces`、`GET /traces/{id}`~~ | 已完成：SQL、事务、银行、Plaid、Redis 都有 span；只保存非 GET 请求；只能读自己 space 的 |
 | ~~Redis 限流（token bucket）~~ | 已完成：每个 space 一个桶，作用于 pulls / p2p / withdrawals / write-offs；Redis 不可用时放行并记在 trace 里。AI 预算预占还没有 |
 | ~~Plaid 余额检查~~ | 已完成：首次拉款时创建 Plaid 沙箱 Item（自定义用户，余额 $3,240.18），余额不足或 Plaid 无响应时拒绝拉款（`FERN_PLAID=sandbox`） |
-| `/v1` 前缀、Column webhook 接口（HMAC 验签） | 现在只有 `/webhooks/sim`；原型里画的是 `/v1/webhooks/column` |
-| Cloudflare / ALB 节点 | 应用测不到它们的耗时；trace 根 span 记录 `cf-ray` 和 `X-Amzn-Trace-Id`，前端据此点亮这两个节点，但不显示耗时 |
-| `POST /v1/ops/reconciliation/run`、`recon_runs` / `recon_exceptions` 表 | 对账 |
-| `GET /v1/status`（聚合 CloudWatch、K8s、Prometheus） | 架构页的节点状态 |
-| `POST /v1/ops/reports` | AI 日报 |
+| `/v1` 前缀、Column webhook 接口（HMAC 验签） | 不做：结算和退回由演示时钟（`/demo/settle`）主动回读 Column；页面文档写的是真实路径 |
+| Cloudflare 节点 | 没有 ALB（走 Cloudflare Tunnel）。应用测不到边缘耗时；根 span 有 `cf-ray` 时点亮 Cloudflare 和 cloudflared，不显示耗时；本地运行显示「direct (local)」 |
+| ~~对账、AI 日报~~ | 已完成（`/ops/*`） |
+| ~~`GET /status`~~ | 已完成：现查 Postgres、Redis，加最近一小时 traces 的汇总 |
+| 压测 | 待做：真实跑一次，把结果作为静态 JSON 放进页面 |

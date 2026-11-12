@@ -1,0 +1,1294 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fern</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #060907;
+  --card: #0D120F;
+  --surface: rgba(255,255,255,0.04);
+  --surface-2: rgba(255,255,255,0.08);
+  --line: rgba(255,255,255,0.09);
+  --text: #F1F7F2;
+  --muted: rgba(241,247,242,0.62);
+  --faint: rgba(241,247,242,0.4);
+  --fern: #52E08A;
+  --fern-ink: #03140A;
+  --fern-soft: rgba(82,224,138,0.12);
+  --amber: #F2B84B;
+  --amber-soft: rgba(242,184,75,0.12);
+  --blue: #7CC0FF;
+  --blue-soft: rgba(124,192,255,0.12);
+  --red: #FF6F61;
+  --red-soft: rgba(255,111,97,0.12);
+  --violet: #C9A7FF;
+  /* chart series, validated on --card with the dataviz validator (dark mode) */
+  --s1: #2FA866; --s2: #3B82D9; --s3: #C2610F;
+  --display: "Cormorant Garamond", Georgia, serif;
+  --ui: "Inter Tight", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--ui); -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; overflow-x: hidden; }
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; }
+#veins { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.wrap { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .faint { color: var(--faint); }
+.small { font-size: 12.5px; }
+
+header { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px); background: rgba(6,9,7,0.75); border-bottom: 1px solid var(--line); }
+header .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand svg { width: 26px; height: 26px; }
+.brand span { font-family: var(--display); font-variant: small-caps; letter-spacing: 0.14em; font-size: 22px; font-weight: 600; }
+nav.top { display: flex; gap: 4px; }
+nav.top a { text-decoration: none; padding: 6px 14px; border-radius: 999px; color: var(--muted); font-weight: 500; font-size: 14px; }
+nav.top a.on, nav.top a:hover { color: var(--text); background: var(--surface-2); }
+nav.top .short { display: none; }
+@media (max-width: 600px) { nav.top .full { display: none; } nav.top .short { display: inline; } }
+.sandbox { margin-left: auto; font-size: 12px; font-weight: 600; letter-spacing: .04em; padding: 5px 12px; border-radius: 999px; border: 1px solid rgba(242,184,75,.35); color: var(--amber); background: var(--amber-soft); white-space: nowrap; }
+
+.btn { display: inline-block; text-decoration: none; border: 0; border-radius: 999px; padding: 10px 18px; font-weight: 600; font-size: 14px; background: var(--surface-2); transition: transform .12s, background .12s; white-space: nowrap; }
+.btn:hover { background: rgba(255,255,255,.12); }
+.btn:active { transform: scale(.98); }
+.btn.primary { background: var(--fern); color: var(--fern-ink); }
+.btn.primary:hover { background: #6BEA9C; }
+.btn.ghost { background: transparent; border: 1px solid var(--line); }
+.btn[disabled] { opacity: .35; pointer-events: none; }
+.btn.sm { padding: 6px 12px; font-size: 13px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.chip.flat::before { display: none; }
+.c-green { color: var(--fern); background: var(--fern-soft); }
+.c-blue { color: var(--blue); background: var(--blue-soft); }
+.c-amber { color: var(--amber); background: var(--amber-soft); }
+.c-red { color: var(--red); background: var(--red-soft); }
+.c-grey { color: var(--muted); background: var(--surface-2); }
+.c-violet { color: var(--violet); background: rgba(201,167,255,.13); }
+.breathe { animation: breathe 1.8s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .45; } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; }
+.pad { padding: 20px 22px; }
+h2.t { font-family: var(--display); font-variant: small-caps; font-weight: 600; letter-spacing: .03em; font-size: 25px; margin: 0 0 12px; line-height: 1.15; }
+h3.k { font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); margin: 18px 0 8px; }
+input[type=text], input[type=number] { width: 100%; background: var(--surface-2); border: 1px solid transparent; border-radius: 999px; padding: 11px 16px; color: var(--text); font: inherit; outline: none; }
+input:focus { border-color: rgba(82,224,138,.5); }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 50; background: #111813; border: 1px solid var(--line); padding: 10px 18px; border-radius: 999px; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+.sample { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 14px; background: rgba(201,167,255,.08); border: 1px solid rgba(201,167,255,.22); color: var(--violet); font-size: 13px; margin-bottom: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--surface); }
+.callout { padding: 12px 14px; border-radius: 14px; font-size: 13px; margin-bottom: 14px; }
+.callout.amber { background: var(--amber-soft); color: var(--amber); }
+.callout.green { background: var(--fern-soft); color: var(--fern); }
+.callout.red { background: var(--red-soft); color: var(--red); }
+.empty { padding: 26px 8px; color: var(--faint); font-size: 13px; text-align: center; }
+.grid { display: grid; gap: 16px; }
+.g2 { grid-template-columns: 1fr 1fr; } .g3 { grid-template-columns: repeat(3, 1fr); } .g4 { grid-template-columns: repeat(4, 1fr); } .g6 { grid-template-columns: repeat(6, 1fr); }
+.stack > * + * { margin-top: 16px; }
+/* grid children may shrink below their content, so wide tables scroll inside their card */
+.with-side > *, .stack > *, .grid > *, .ep > *, .split > * { min-width: 0; }
+
+/* landing */
+.hero { text-align: center; padding: 110px 0 64px; }
+.hero h1 { font-family: var(--display); font-variant: small-caps; font-weight: 500; letter-spacing: .04em; font-size: clamp(44px, 7vw, 84px); line-height: 1.02; margin: 22px 0; }
+.hero h1 .accent { color: var(--fern); }
+.hero p { max-width: 640px; margin: 0 auto 32px; color: var(--muted); font-size: 17px; }
+.ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.live { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--fern); box-shadow: 0 0 0 4px var(--fern-soft); }
+.cases { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; padding-bottom: 28px; }
+.case { padding: 20px; display: flex; flex-direction: column; gap: 10px; min-height: 196px; text-decoration: none; }
+.case .n { font-family: var(--mono); font-size: 12px; color: var(--fern); }
+.case h3 { font-family: var(--display); font-variant: small-caps; letter-spacing: .03em; font-weight: 600; font-size: 22px; margin: 0; line-height: 1.1; }
+.case p { margin: 0; color: var(--muted); font-size: 14px; flex: 1; }
+.case .survives { font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px; }
+.case .survives b { color: var(--text); font-weight: 500; }
+.tours { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding-bottom: 80px; }
+.tour { padding: 22px; text-decoration: none; display: block; }
+.tour .who { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--fern); }
+.tour h3 { font-family: var(--display); font-variant: small-caps; font-size: 26px; font-weight: 600; margin: 6px 0 8px; letter-spacing: .03em; }
+.tour ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+footer { border-top: 1px solid var(--line); padding: 28px 0 40px; font-size: 13px; color: var(--faint); text-align: center; }
+
+/* section layout with sidebar */
+.page-title { padding: 30px 0 18px; }
+.page-title h1 { font-family: var(--display); font-variant: small-caps; font-weight: 500; letter-spacing: .04em; font-size: 44px; margin: 0; line-height: 1.05; }
+.page-title p { margin: 6px 0 0; color: var(--muted); }
+.with-side { display: grid; grid-template-columns: 212px 1fr; gap: 26px; padding-bottom: 60px; align-items: start; }
+.side-nav { position: sticky; top: 84px; display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 100px); overflow-y: auto; }
+.side-nav a { padding: 5px 12px !important; }
+.side-nav .grp { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: 12px 12px 4px; }
+.side-nav a { text-decoration: none; font-size: 14px; color: var(--muted); padding: 7px 12px; border-radius: 999px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.side-nav a.on, .side-nav a:hover { background: var(--surface-2); color: var(--text); }
+.side-select { display: none; width: 100%; background: var(--surface-2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 10px 16px; font: 500 14px var(--ui); appearance: auto; }
+.side-select option, .side-select optgroup { background: #0D120F; color: var(--text); }
+.side-nav a .badge { font-family: var(--mono); font-size: 11px; padding: 0 7px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); }
+
+/* app view */
+.rail-wrap { padding: 22px 0 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.rail { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+.step { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 14px 7px 8px; font-size: 13px; font-weight: 500; }
+.step .num { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 11px; background: var(--surface-2); color: var(--muted); }
+.step.done .num { background: var(--fern); color: var(--fern-ink); }
+.step.next { border-color: rgba(82,224,138,.55); box-shadow: 0 0 0 3px var(--fern-soft); }
+.clock { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.clock .t { font-family: var(--mono); color: var(--muted); }
+.hint { font-size: 13px; color: var(--muted); margin: 0 0 18px; }
+.hint b { color: var(--fern); font-weight: 600; }
+.split { display: grid; grid-template-columns: 390px 1fr; gap: 24px; align-items: start; padding-bottom: 60px; }
+.mobile-tabs { display: none; }
+.phone { position: relative; border-radius: 40px; border: 1px solid rgba(255,255,255,.14); background: #0B110D; padding: 18px 18px 22px; min-height: 720px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.5), inset 0 0 0 6px #060907; }
+.statusbar { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; padding: 4px 12px 14px; color: var(--muted); }
+.banner { margin: 0 4px 14px; padding: 10px 14px; border-radius: 14px; background: var(--red-soft); color: var(--red); font-size: 13px; font-weight: 500; }
+.bal-label { font-size: 13px; color: var(--muted); padding: 0 6px; }
+.balance { font-family: var(--display); font-weight: 500; font-size: 54px; line-height: 1.05; padding: 2px 6px 6px; font-variant-numeric: lining-nums tabular-nums; }
+.balance.neg { color: var(--red); }
+.subbal { display: flex; gap: 14px; flex-wrap: wrap; padding: 0 6px 18px; font-size: 12.5px; color: var(--muted); }
+.subbal span { cursor: help; border-bottom: 1px dotted var(--faint); }
+.subbal b { color: var(--text); font-weight: 600; font-family: var(--mono); font-size: 12px; }
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 4px 20px; }
+.actions .btn { padding: 12px 0; }
+.act-title { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 0 6px 8px; }
+.item { display: flex; align-items: center; gap: 12px; padding: 11px 8px; border-radius: 14px; cursor: pointer; }
+.item:hover, .item.sel { background: var(--surface); }
+.icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); font-size: 15px; flex: none; }
+.item .mid { flex: 1; min-width: 0; }
+.item .ttl { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .amt { font-family: var(--mono); font-size: 13px; text-align: right; }
+.amt.in { color: var(--fern); }
+.sheet-bg { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; z-index: 5; }
+.sheet { width: 100%; background: #101712; border-top: 1px solid var(--line); border-radius: 26px 26px 0 0; padding: 18px 20px 24px; max-height: 88%; overflow: auto; animation: up .2s ease-out; }
+@keyframes up { from { transform: translateY(30px); opacity: 0; } }
+.sheet h3 { font-family: var(--display); font-variant: small-caps; font-weight: 600; font-size: 26px; letter-spacing: .03em; margin: 4px 0 14px; }
+.grab { width: 40px; height: 4px; border-radius: 4px; background: var(--surface-2); margin: 0 auto 10px; }
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 6px 6px; }
+.toggle { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: var(--amber-soft); border: 1px solid rgba(242,184,75,.25); margin: 6px 0 16px; cursor: pointer; font-size: 13px; }
+.toggle input { accent-color: var(--amber); margin-top: 3px; }
+.toggle b { color: var(--amber); }
+.steps { list-style: none; margin: 8px 0 16px; padding: 0; }
+.steps li { position: relative; padding: 0 0 16px 26px; font-size: 13.5px; }
+.steps li::before { content: ""; position: absolute; left: 4px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--fern); }
+.steps li::after { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 2px; background: var(--line); }
+.steps li:last-child::after { display: none; }
+.steps li.amber::before { background: var(--amber); } .steps li.red::before { background: var(--red); } .steps li.blue::before { background: var(--blue); }
+.steps .when { font-size: 11.5px; color: var(--faint); }
+.steps .real { font-size: 11.5px; color: var(--muted); font-style: italic; }
+.hood { padding: 20px; min-height: 720px; }
+.hood-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.hood-head h2 { font-family: var(--display); font-variant: small-caps; font-weight: 600; font-size: 28px; letter-spacing: .03em; margin: 0; }
+.tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tabs button { background: none; border: 0; padding: 9px 14px; font-weight: 500; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button.on { color: var(--text); border-color: var(--fern); }
+.tl { list-style: none; margin: 0; padding: 0; }
+.tl li { display: grid; grid-template-columns: 64px 70px 1fr; gap: 10px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.tl .src { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.src.api { color: var(--blue); } .src.bank { color: var(--fern); } .src.clock { color: var(--amber); } .src.ops { color: var(--violet); }
+.tl .code { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.journal { border: 1px solid var(--line); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
+.journal.fresh { animation: flash 1.6s ease-out; }
+@keyframes flash { 0% { border-color: var(--fern); box-shadow: 0 0 0 3px var(--fern-soft); } }
+.journal .jh { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; background: var(--surface); font-size: 12.5px; flex-wrap: wrap; }
+.journal .jh .eff { font-family: var(--mono); color: var(--fern); }
+.taccount { display: grid; grid-template-columns: 1fr 1fr; }
+.taccount > div { padding: 10px 14px; }
+.taccount > div + div { border-left: 1px solid var(--line); }
+.taccount .side { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; color: var(--faint); margin-bottom: 4px; }
+.taccount .acct { font-size: 13.5px; }
+.taccount .val { font-family: var(--mono); font-size: 13px; }
+.check { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.check .ok { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--fern); color: var(--fern-ink); font-size: 13px; font-weight: 700; flex: none; }
+.check .bad { background: var(--red); }
+
+/* ops / eng pieces */
+.who { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; background: var(--fern-soft); color: var(--fern); flex: none; }
+.avatar.bot { background: rgba(201,167,255,.14); color: var(--violet); }
+.kv { display: flex; justify-content: space-between; font-size: 13.5px; padding: 5px 0; }
+.kv b { font-family: var(--mono); font-weight: 500; }
+.approvals { display: flex; gap: 14px; flex-wrap: wrap; margin: 12px 0 14px; }
+.approver { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; }
+.cite { display: inline-flex; align-items: center; font-family: var(--mono); font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--fern-soft); color: var(--fern); border: 0; cursor: pointer; vertical-align: 1px; }
+.ai-answer { font-size: 14.5px; line-height: 1.65; }
+.ai-note { font-size: 12px; color: var(--faint); margin-top: 12px; }
+.tool { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 6px 0; font-size: 13px; border-bottom: 1px dashed var(--line); }
+.tool .fn { font-family: var(--mono); color: var(--violet); overflow-wrap: anywhere; }
+.report h4 { font-family: var(--display); font-variant: small-caps; font-size: 21px; font-weight: 600; letter-spacing: .03em; margin: 20px 0 6px; }
+.report p { margin: 0 0 8px; color: var(--text); }
+.stat { padding: 16px 18px; }
+.stat .lbl { font-size: 12px; color: var(--muted); }
+.stat .val { font-family: var(--display); font-size: 34px; font-weight: 500; line-height: 1.1; margin-top: 2px; font-variant-numeric: lining-nums tabular-nums; }
+.stat .sub { font-size: 12px; color: var(--faint); }
+.stat.warn .val { color: var(--amber); } .stat.good .val { color: var(--fern); }
+.arch { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 6px 0 10px; }
+.node { border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: var(--surface); font-size: 13px; position: relative; }
+.node b { display: block; font-size: 14px; margin-bottom: 4px; }
+.node.money { border-color: rgba(82,224,138,.5); }
+.arch.flow .node:not(:last-child)::after { content: "→"; position: absolute; right: -11px; top: 50%; transform: translateY(-50%); color: var(--fern); }
+.legend-line { font-size: 12.5px; color: var(--muted); }
+.ep { display: grid; grid-template-columns: 330px 1fr; gap: 16px; }
+.ep-list button { width: 100%; text-align: left; display: flex; gap: 10px; align-items: center; background: none; border: 0; padding: 8px 10px; border-radius: 12px; font-size: 13px; }
+.ep-list button:hover, .ep-list button.on { background: var(--surface-2); }
+.method { font-family: var(--mono); font-size: 11px; font-weight: 600; width: 44px; flex: none; }
+.method.GET { color: var(--blue); } .method.POST { color: var(--fern); }
+pre.code { font-variant-ligatures: none; background: #070B08; border: 1px solid var(--line); border-radius: 14px; padding: 14px; font: 12.5px/1.55 var(--mono); color: #CFE9D7; overflow: auto; margin: 6px 0 14px; max-height: 360px; white-space: pre; }
+.match { display: grid; grid-template-columns: 1fr 120px 1fr; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.match .mid { text-align: center; }
+.seq { width: 100%; height: auto; }
+
+/* engineering pages */
+.pager { display: flex; justify-content: space-between; gap: 12px; }
+a.lnk { color: var(--fern); text-decoration: none; border-bottom: 1px solid rgba(82,224,138,.35); }
+.srcref { display: inline-block; font-size: 11.5px; color: var(--muted); background: var(--surface-2); padding: 1px 8px; border-radius: 6px; }
+.codefile { font-size: 11.5px; color: var(--faint); margin: 2px 0 -2px; }
+.hc { color: rgba(241,247,242,.42); } .hs { color: #A8E6BD; } .hk { color: #C9A7FF; }
+.states { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.states .arrow { color: var(--faint); font-size: 13px; white-space: pre; }
+.anno { border-left: 2px solid var(--fern); padding: 4px 12px; font-size: 13.5px; color: var(--muted); }
+details.adr { border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-bottom: 10px; background: var(--surface); }
+details.adr summary { cursor: pointer; font-weight: 600; list-style-position: outside; }
+details.adr .adr-body { margin-top: 10px; font-size: 14px; }
+details.adr .adr-body p { margin: 0 0 8px; }
+.tour-list { margin: 0; padding-left: 20px; } .tour-list li { margin: 6px 0; }
+
+/* charts */
+.chart { position: relative; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .tip { position: absolute; pointer-events: none; background: #141B16; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12px; display: none; white-space: nowrap; z-index: 3; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.chart .tip .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.chart .tip i, .legend i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+details.tbl summary { cursor: pointer; font-size: 12px; color: var(--faint); margin-top: 6px; }
+details.tbl table { margin-top: 8px; font-size: 12px; }
+.chart-title { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.chart-title b { font-size: 14px; font-weight: 600; }
+
+@media (max-width: 1080px) {
+  .cases { grid-template-columns: 1fr 1fr; } .tours { grid-template-columns: 1fr; }
+  .split { grid-template-columns: 1fr; }
+  .mobile-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .split[data-pane=app] .hood, .split[data-pane=hood] .phone { display: none; }
+  .with-side { grid-template-columns: 1fr; }
+  .side-nav { display: none; }
+  .side-select { display: block; }
+  .g3, .g4 { grid-template-columns: 1fr 1fr; } .g6 { grid-template-columns: repeat(3, 1fr); }
+  .ep { grid-template-columns: 1fr; }
+  .arch { grid-template-columns: 1fr 1fr; } .arch.flow .node::after { display: none; }
+}
+@media (max-width: 600px) {
+  .wrap { padding: 0 16px; }
+  header .wrap { gap: 12px; } nav.top a { padding: 6px 9px; } .sandbox { display: none; }
+  .cases, .g2, .g3, .g4 { grid-template-columns: 1fr; } .g6 { grid-template-columns: 1fr 1fr; }
+  .phone { border-radius: 28px; min-height: 640px; }
+  .tl li { grid-template-columns: 54px 1fr; } .tl li .src { display: none; }
+  .match { grid-template-columns: 1fr; } .match .mid { text-align: left; }
+  table { display: block; overflow-x: auto; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- v3: demo + trace, engineering, ops ---------- */
+.intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 28px; align-items: end; padding: 30px 0 4px; }
+.intro h1 { font-family: var(--display); font-variant: small-caps; font-weight: 500; letter-spacing: .04em; font-size: 46px; margin: 0; line-height: 1; }
+.intro p { margin: 8px 0 0; color: var(--muted); max-width: 640px; }
+.deps { display: grid; grid-template-columns: repeat(2, 230px); gap: 8px; text-decoration: none; }
+.dep { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); font-size: 12px; }
+.dep:hover { border-color: rgba(82,224,138,.4); }
+.dep i { width: 8px; height: 8px; border-radius: 50%; background: var(--fern); box-shadow: 0 0 0 3px var(--fern-soft); flex: none; }
+.dep div { flex: 1; min-width: 0; } .dep b { display: block; font-size: 13px; font-weight: 600; } .dep div span { color: var(--faint); }
+.dep > .mono { color: var(--muted); font-size: 11px; white-space: nowrap; }
+.step .num { width: auto; min-width: 22px; padding: 0 6px; border-radius: 999px; }
+
+.trace { padding: 18px 20px 20px; min-height: 720px; }
+.trace-list { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 12px; margin-bottom: 14px; border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+.tchip { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 12px 4px 5px; font-size: 12px; flex: none; }
+.tchip.on { border-color: rgba(82,224,138,.55); background: var(--fern-soft); }
+.tchip.bad .case-tag { color: var(--amber); }
+.case-tag { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--fern); }
+.trace-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 16px; align-items: center; }
+.th-title { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.th-title b { font-family: var(--mono); font-size: 14px; font-weight: 500; overflow-wrap: anywhere; }
+.th-meta { font-size: 11.5px; color: var(--faint); font-family: var(--mono); }
+.th-sub { font-size: 13px; color: var(--muted); margin: 4px 0 0; }
+.svcmap { width: 100%; height: auto; display: block; margin: 10px 0 4px; }
+.tier-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); margin: 0 0 14px; }
+.tier-legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; margin-right: 6px; vertical-align: -1px; }
+.wf { border: 1px solid var(--line); border-radius: 14px; overflow: hidden; font-size: 12px; }
+.wf-row { display: grid; grid-template-columns: minmax(0, 47%) minmax(0, 1fr); align-items: center; min-height: 26px; border-bottom: 1px solid rgba(255,255,255,.045); cursor: pointer; }
+.wf-row:last-child { border-bottom: 0; }
+.wf-row:hover { background: var(--surface); } .wf-row.on { background: var(--surface-2); }
+.wf-row.wf-head { cursor: default; background: var(--surface); font-size: 10.5px; color: var(--faint); letter-spacing: .05em; text-transform: uppercase; min-height: 24px; }
+.wf-name { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; padding-right: 8px; }
+.wf-name i { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.wf-name .svc { color: var(--muted); font-size: 11.5px; flex: none; }
+.wf-name .op { font-family: var(--mono); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; }
+.wf-name .n { font-size: 11px; color: var(--faint); flex: none; }
+.caret { width: 14px; flex: none; background: none; border: 0; padding: 0; color: var(--muted); font-size: 11px; line-height: 1; }
+.wf-track { position: relative; height: 26px; border-left: 1px solid var(--line); margin-right: 10px; }
+.wf-head .wf-track span { position: absolute; top: 6px; transform: translateX(-50%); font-family: var(--mono); text-transform: none; letter-spacing: 0; }
+.wf-head .wf-track span { white-space: nowrap; }
+.wf-head .wf-track span:first-child { transform: none; padding-left: 4px; }
+.svcmap-wrap { overflow-x: auto; }
+.wf-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,.05); }
+.wf-bar { position: absolute; top: 8px; height: 10px; border-radius: 3px; }
+.wf-dur { position: absolute; top: 6px; font-family: var(--mono); font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.wf-row.err .op, .wf-row.err .wf-dur { color: var(--red); }
+.span-detail { margin-top: 12px; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; background: #0A0F0C; }
+.sd-head { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-bottom: 10px; font-size: 13px; }
+.sd-head i { width: 10px; height: 10px; border-radius: 3px; }
+.sd-head .mono { overflow-wrap: anywhere; }
+.span-detail pre.code { margin: 0 0 10px; max-height: 220px; }
+.attrs { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 18px; font: 12px/1.45 var(--mono); }
+.attrs .k { color: var(--faint); } .attrs .v { overflow-wrap: anywhere; }
+.trace-ledger { margin-top: 14px; }
+.trace-ledger h3.k { margin-top: 0; }
+.after { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; font-size: 12.5px; color: var(--muted); margin-top: 10px; }
+.after b { color: var(--text); font-family: var(--mono); font-weight: 500; } .after .ok { color: var(--fern); } .after .bad { color: var(--red); }
+.trace-empty { text-align: center; color: var(--muted); padding: 10px 0 0; }
+.trace-empty p { max-width: 420px; margin: 12px auto 0; font-size: 14px; }
+
+/* engineering */
+.eng-title { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+.seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); }
+.seg a { text-decoration: none; padding: 7px 18px; border-radius: 999px; font-size: 14px; font-weight: 500; color: var(--muted); }
+.seg a.on { background: var(--fern); color: var(--fern-ink); }
+.eng-body { padding-bottom: 60px; }
+.arch-svg { width: 100%; height: auto; display: block; }
+.arch-scroll { overflow-x: auto; }
+.arch-scroll .arch-svg { min-width: 760px; }
+.integ-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.integ-head h3 { font-family: var(--display); font-variant: small-caps; font-size: 24px; font-weight: 600; letter-spacing: .03em; margin: 0; line-height: 1.1; }
+.metrics4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 10px 0 12px; }
+.metrics4 div { background: var(--surface); border-radius: 10px; padding: 7px 9px; }
+.metrics4 span { display: block; font-size: 10.5px; color: var(--faint); }
+.metrics4 b { font-family: var(--mono); font-weight: 500; font-size: 13px; }
+.uses { margin: 10px 0 0; padding: 0; list-style: none; font: 11.5px/1.7 var(--mono); color: var(--muted); }
+.spark { width: 120px; height: 26px; display: block; }
+.section-h { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.section-h h2.t { margin: 0; }
+.doc { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; }
+.doc > * { min-width: 0; }
+.doc-nav .grp { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: 12px 10px 4px; }
+.doc-nav .grp:first-child { padding-top: 0; }
+.doc-nav button { width: 100%; text-align: left; display: flex; gap: 8px; align-items: center; background: none; border: 0; padding: 6px 10px; border-radius: 10px; font-size: 12.5px; }
+.doc-nav button:hover, .doc-nav button.on { background: var(--surface-2); }
+.doc-nav .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badges { display: flex; gap: 6px; flex-wrap: wrap; margin: 10px 0 4px; }
+.doc h3.k:first-of-type { margin-top: 14px; }
+
+/* operations */
+.ops-main { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); align-items: start; }
+.attn { display: flex; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--line); align-items: flex-start; }
+.attn:last-child { border-bottom: 0; padding-bottom: 0; }
+.attn .sev { width: 4px; align-self: stretch; border-radius: 4px; flex: none; }
+.attn .body { flex: 1; min-width: 0; }
+.attn .body b { font-weight: 600; }
+.attn .body p { margin: 3px 0 0; font-size: 13px; color: var(--muted); }
+.attn .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.toast a { color: var(--fern); }
+
+@media (max-width: 1080px) {
+  .intro { grid-template-columns: 1fr; gap: 14px; }
+  .split[data-pane=app] .trace, .split[data-pane=trace] .phone { display: none; }
+  .doc { grid-template-columns: minmax(0, 1fr); }
+  .ops-main { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+  .intro h1 { font-size: 38px; }
+  .deps { grid-template-columns: 1fr 1fr; }
+  .dep > .mono { display: none; }
+  .trace { padding: 14px 12px; min-height: 0; }
+  .wf-row { grid-template-columns: minmax(0, 58%) minmax(0, 1fr); }
+  .wf-name .svc { display: none; }
+  .wf-head .wf-track span:nth-child(even) { display: none; }
+  .svcmap { min-width: 600px; }
+  .metrics4 { grid-template-columns: 1fr 1fr; }
+  .attn { flex-wrap: wrap; } .attn .acts { width: 100%; justify-content: flex-start; padding-left: 16px; }
+  .seg a { padding: 7px 12px; }
+}
+.step[disabled] { opacity: .55; cursor: progress; }
+.sample { margin-bottom: 0; }
+</style>
+</head>
+<body>
+<canvas id="veins" aria-hidden="true"></canvas>
+<header>
+  <div class="wrap">
+    <a class="brand" href="#/" aria-label="Fern home">
+      <svg viewBox="0 0 32 32" fill="none" stroke="#52E08A" stroke-width="2.2" stroke-linecap="round">
+        <path d="M16 30 C16 22 9 21 9 14 A7 7 0 1 1 16 21 A3.6 3.6 0 1 1 13.2 16.6"/>
+        <path d="M16 26 C19 25 21 23 22 20" opacity=".55"/>
+      </svg>
+      <span>Fern</span>
+    </a>
+    <nav class="top" id="nav"></nav>
+    <div class="sandbox">Sandbox · No real money</div>
+  </div>
+</header>
+<main id="view"></main>
+<div id="toast"></div>
+
+
+<script>
+// Fern demo UI. Talks to the Fern API on the same origin with relative paths, so it works at
+// http://localhost:8000/ and behind the Cloudflare Worker at https://waken.dev/apps/fern/.
+// Every state-changing request returns X-Trace-Id; the trace panel shows GET traces/{id}.
+
+// ================================================================== API client
+const BASE = location.pathname.endsWith("/") ? location.pathname : location.pathname + "/";
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch { /* private mode */ } },
+};
+const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `k-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+let SESSION = null;
+
+async function call(method, path, body, { idem } = {}) {
+  const headers = {};
+  if (SESSION) headers.Authorization = `Bearer ${SESSION.token}`;
+  if (idem) headers["Idempotency-Key"] = idem;
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  let r;
+  try { r = await fetch(BASE + path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) }); }
+  catch (e) { return { status: 0, data: { error: "NetworkError", message: String(e) } }; }
+  const text = await r.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text.slice(0, 500) }; }
+  return { status: r.status, data, traceId: r.headers.get("X-Trace-Id") };
+}
+const errText = r => { const d = r.data || {}; return d.message || (typeof d.detail === "string" ? d.detail : d.detail ? JSON.stringify(d.detail) : d.error) || `HTTP ${r.status}`; };
+
+// ================================================================== state
+const S = {
+  me: null, transfers: [], tb: null, ops: null, report: null, status: null, join: null, fatal: null,
+  traces: [], trace: null, span: null, open: {}, animate: null, refs: {},
+  sheet: null, detail: null, pane: "app", busy: null,
+  api: "POST /withdrawals", apiResult: null, apiTrace: null,
+};
+const EXT_ACCT = "External checking ••4421";
+const fmt = m => (m < 0 ? "−" : "") + "$" + (Math.abs(m) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const me = () => S.me && S.me.customers.find(c => c.kind === "primary");
+const alex = () => S.me && S.me.customers.find(c => c.kind === "npc");
+const isSim = () => S.me && S.me.bank === "sim";
+const bankName = () => isSim() ? "bank simulator" : "Column sandbox";
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.innerHTML = `<div class="toast">${msg}</div>`;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => el.innerHTML = "", 4200);
+}
+
+async function boot() {
+  SESSION = store.get("fern.session");
+  if (SESSION && (await call("GET", "me")).status !== 200) SESSION = null;
+  if (!SESSION) {
+    const r = await call("POST", "spaces");
+    if (r.status === 201) { setSession(r.data); if (r.traceId) await loadTrace(r.traceId, {}, false); }
+    else if (r.status === 503) { S.join = ((await call("GET", "spaces")).data || {}).spaces || []; render(); return; }
+    else { S.fatal = `Could not open a demo space: ${errText(r)}`; render(); return; }
+  }
+  await refresh();
+  await loadRecentTraces();
+  render();
+}
+function setSession(d) { SESSION = { token: d.token, space_id: d.space_id }; store.set("fern.session", SESSION); S.join = null; }
+async function joinSpace(id) {
+  const r = await call("POST", `spaces/${id}/join`);
+  if (r.status !== 200) return toast(errText(r));
+  setSession(r.data); await refresh(); await loadRecentTraces(); render();
+}
+async function newSpace() {
+  store.set("fern.session", null); SESSION = null;
+  Object.assign(S, { me: null, transfers: [], traces: [], trace: null, span: null, ops: null, report: null, refs: {} });
+  render(); await boot();
+}
+async function refresh() {
+  const [m, t, tb] = await Promise.all([call("GET", "me"), call("GET", "transfers"), call("GET", "ledger/trial-balance")]);
+  if (m.status === 200) S.me = m.data;
+  if (t.status === 200) S.transfers = t.data.transfers;
+  if (tb.status === 200) S.tb = tb.data;
+  const [top] = route();
+  if (top === "ops") await refreshOps();
+}
+async function refreshOps() {
+  const [o, rep] = await Promise.all([call("GET", "ops/summary"), S.report ? null : call("GET", "ops/reports/latest")]);
+  if (o.status === 200) S.ops = o.data;
+  if (rep && rep.status === 200) S.report = rep.data;
+}
+async function refreshStatus() {
+  const r = await call("GET", "status");
+  if (r.status === 200) S.status = r.data;
+}
+
+// Run one request from a button: busy state, the call, its trace, fresh balances.
+async function run(meta, method, path, body, opts = {}) {
+  if (S.busy) return null;
+  S.busy = meta.title; render();
+  const r = await call(method, path, body, opts);
+  const ref = meta.ref || (r.data && r.data.id);
+  if (ref && r.traceId) S.refs[ref] = r.traceId;
+  if (r.traceId) await loadTrace(r.traceId, { ...meta, ref, http: r.status }, true);
+  await refresh();
+  if (S.trace === r.traceId) { const tr = S.traces.find(x => x.id === r.traceId); if (tr) tr.after = afterNow(); }
+  S.busy = null;
+  if (r.status >= 400 || r.status === 0) toast(`${r.status || "network"} · ${esc(errText(r))}`);
+  return r;
+}
+const afterNow = () => {
+  const c = me(); if (!c) return null;
+  return { balance: c.balance_minor, available: c.available_minor, ok: !!(S.tb && S.tb.debits_equal_credits && S.tb.balances_match_postings) };
+};
+
+// ================================================================== traces
+// Display name and tier per service. Tier colors are the three validated series colors.
+const SVC = {
+  cloudflare: ["cloudflare", "ext"], tunnel: ["cloudflared", "fern"], api: ["fern-api", "fern"],
+  postgres: ["postgres", "data"], redis: ["redis", "data"],
+  column: ["column", "ext"], "bank-sim": ["bank-sim", "ext"], plaid: ["plaid", "ext"], openai: ["openai", "ext"],
+};
+const svcName = s => (SVC[s] || [s])[0];
+const TIER = { fern: ["Fern on AWS", "var(--s1)", "#2FA866"], data: ["Data stores", "var(--s2)", "#3B82D9"], ext: ["External", "var(--s3)", "#C2610F"] };
+const tierHex = svc => TIER[(SVC[svc] || [0, "fern"])[1]][2];
+const NODE = svc => svc === "bank-sim" ? "column" : svc;
+const OUTBOUND = new Set(["column", "bank-sim", "plaid", "openai"]);
+// What each route is, for the trace list. Titles set by the button that ran it win.
+const TAGS = {
+  "POST /spaces": ["Demo", "Open a demo space"], "POST /spaces/{space_id}/join": ["Demo", "Join a space"],
+  "POST /demo/payroll": ["S1", "Get paid"], "POST /pulls": ["S2", "Add money"],
+  "POST /demo/settle": ["Clock", "Settle at the bank"], "POST /demo/release-funds": ["Clock", "Release holds"],
+  "POST /p2p": ["S3", "Pay Alex"], "POST /withdrawals": ["S4", "Withdraw"],
+  "POST /transfers/recover-unknown": ["S4", "Recovery"], "POST /demo/transfers/{transfer_id}/return": ["S5", "Chargeback"],
+  "POST /write-offs": ["S5", "Request write-off"], "POST /write-offs/{write_off_id}/approve": ["S5", "Approve write-off"],
+  "POST /ops/reconciliation/run": ["Ops", "Reconciliation"], "POST /ops/drills/unbooked-bank-debit": ["Ops", "Drill: unbooked debit"],
+  "POST /ops/reports": ["Ops", "Daily report"], "POST /ops/reconciliation/exceptions/{exception_id}/escalate": ["Ops", "Escalate"],
+};
+
+function buildTrace(raw, meta) {
+  const by = {};
+  const spans = raw.spans.map(s => ({ id: s.id, parentId: s.parent_id, svc: s.service, op: s.name, start: s.start_us / 1000,
+    dur: Math.max(s.duration_us / 1000, 0.001), status: s.status, attrs: s.attrs || {}, kids: [] }));
+  spans.forEach(s => by[s.id] = s);
+  spans.forEach(s => { s.parent = s.parentId ? by[s.parentId] : null; if (s.parent) s.parent.kids.push(s); });
+  const root = spans.find(s => !s.parent) || spans[0], ordered = [];
+  (function walk(n, d) { n.depth = d; ordered.push(n); n.kids.sort((a, b) => a.start - b.start).forEach(k => walk(k, d + 1)); })(root, 0);
+  for (const s of ordered) { s.tx = s.op.startsWith("db.tx "); if (s.tx && !(s.id in S.open)) S.open[s.id] = false; }
+  const focus = ordered.find(s => s.status === "error" && s !== root && !s.kids.some(k => k.status === "error"))
+    || ordered.find(s => OUTBOUND.has(s.svc)) || ordered.find(s => s.tx) || root;
+  const [tag, title] = TAGS[raw.name] || ["API", raw.name];
+  const edge = !!(root.attrs["cf.ray"]);
+  const services = [...new Set(ordered.map(s => NODE(s.svc)))];
+  if (edge) services.push("cloudflare", "tunnel");
+  return { id: raw.trace_id, root, spans: ordered, total: Math.max(raw.duration_us / 1000, 0.01), status: raw.status,
+    meta: { tag, title, label: raw.name, http: root.attrs["http.status_code"], ...meta }, edge, focus: focus.id, services,
+    journals: ordered.filter(s => s.attrs["ledger.effect"]), started: raw.started_at, after: null };
+}
+async function loadTrace(id, meta, select) {
+  const r = await call("GET", `traces/${id}`);
+  if (r.status !== 200) return null;
+  const tr = buildTrace(r.data, meta);
+  S.traces = [tr, ...S.traces.filter(x => x.id !== id)].slice(0, 30);
+  if (select) { S.trace = tr.id; S.span = tr.focus; S.animate = tr.id; S.pane = "trace"; }
+  return tr;
+}
+async function loadRecentTraces() {
+  const r = await call("GET", "traces?limit=10");
+  if (r.status !== 200) return;
+  const have = new Set(S.traces.map(t => t.id));
+  const missing = r.data.traces.filter(t => !have.has(t.trace_id));
+  const full = await Promise.all(missing.map(t => call("GET", `traces/${t.trace_id}`)));
+  for (const f of full) if (f.status === 200) S.traces.push(buildTrace(f.data, {}));
+  S.traces.sort((a, b) => (b.started || "").localeCompare(a.started || ""));
+  if (!S.trace && S.traces[0]) { S.trace = S.traces[0].id; S.span = S.traces[0].focus; }
+}
+const fmtMs = ms => ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : ms >= 10 ? `${ms.toFixed(1)} ms` : `${ms.toFixed(2)} ms`;
+function statusChip(tr) {
+  const err = tr.spans.find(s => s.status === "error" && s !== tr.root && !s.kids.some(k => k.status === "error"));
+  const http = tr.meta.http || "";
+  if (err) return `<span class="chip c-amber">${http} · ${esc(svcName(err.svc))} ${esc(err.attrs["error.type"] || "error")}</span>`;
+  return `<span class="chip ${http >= 400 ? "c-amber" : "c-green"}">${http || "ok"}</span>`;
+}
+
+// ================================================================== presentation helpers
+const STATUS = {
+  completed: ["Completed", "c-green"], processing: ["Processing", "c-blue"], held: ["Held", "c-amber"], pending: ["Pending", "c-grey"],
+  unknown: ["Confirming", "c-amber breathe"], settled: ["Settled", "c-green"], available: ["Available", "c-green"],
+  returned: ["Returned", "c-red"], failed: ["Failed", "c-red"], manual_review: ["Needs review", "c-amber"], canceled: ["Canceled", "c-grey"],
+};
+const shown = t => t.kind === "pull" && t.status === "settled" && t.events.includes("funds_available") ? "available" : t.status;
+const chip = s => { const [l, c] = STATUS[s] || [s, "c-grey"]; return `<span class="chip ${c}">${l}</span>`; };
+const STEP = {
+  payroll_received: ["Payroll arrived", "green"],
+  debit_authorized: ["You authorized the pull", "green"],
+  hold_placed: ["Money held for this withdrawal", "amber"],
+  source_check_failed: ["Linked account can't cover it (Plaid)", "red"],
+  bank_rejected: ["The bank rejected it", "red"],
+  bank_outcome_unknown: ["No reply from the bank. Confirming…", "amber", "Your money stays held until we know"],
+  processing: ["Bank accepted the transfer", "blue"],
+  settled: ["Settled", "green", "Real world: 1–2 business days"],
+  funds_available: ["Funds available to spend", "green", "Real world: a few business days after settling"],
+  returned: ["Returned by the other bank", "red"],
+  account_negative: ["Balance went negative", "red"],
+  manual_review: ["Sent to a person: the bank's answer didn't match", "amber"],
+  completed: ["Completed", "green"], failed: ["Failed", "red"], canceled: ["Canceled", "red"],
+};
+const icon = t => ({ payroll: "↓", pull: "⇣", p2p: "→", withdrawal: "↑" })[t.kind];
+function incoming(t) { const c = me(); return t.kind === "payroll" || t.kind === "pull" || (t.kind === "p2p" && c && t.to_customer_id === c.id); }
+function titleOf(t) {
+  const c = me();
+  if (t.kind === "payroll") return "Payroll · Northwind Labs";
+  if (t.kind === "pull") return t.counterparty_name === "RETURN_UNAUTH" ? "From an account that will dispute it" : `From ${EXT_ACCT}`;
+  if (t.kind === "withdrawal") return `To ${EXT_ACCT}`;
+  return c && t.to_customer_id === c.id ? "From Alex" : "To Alex";
+}
+const ROLE = { bank: "Cash at bank", ach_debit_receivable: "ACH debits in flight", ach_credit_pending: "ACH credits in flight", ach_return_losses: "Return losses" };
+function acctName(role, customerId) {
+  if (role !== "customer_deposit") return ROLE[role] || role;
+  const c = S.me && S.me.customers.find(x => x.id === customerId);
+  return `Deposit · ${c ? c.display_name.split(" ")[0] : "customer"}`;
+}
+function hl(code) {
+  const e = code.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  return e.replace(/(--[^\n]*)|('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*")|\b(SELECT|FROM|WHERE|INSERT|INTO|VALUES|UPDATE|SET|ON CONFLICT|DO NOTHING|DO UPDATE|RETURNING|ORDER BY|GROUP BY|FOR UPDATE|LIMIT|AND|OR|NOT|AS|IN|IS|NULL|FILTER|JOIN|LEFT JOIN|ON|BEGIN|COMMIT|SUM|ANY|coalesce|sum|count|interval|EVALSHA|curl)\b/g,
+    (m, c, s, k) => c ? `<span class="hc">${c}</span>` : s ? `<span class="hs">${s}</span>` : `<span class="hk">${k}</span>`);
+}
+const pretty = v => { try { return JSON.stringify(JSON.parse(v), null, 2); } catch { return String(v); } };
+
+// seeded random, for the sample benchmark charts
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const CHARTS = {};
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v || 1))); for (const m of [1, 2, 4, 8, 10]) if (m * p >= v) return m * p; return 10 * p; }
+// Line chart: thin 2px lines, recessive grid, crosshair + tooltip, legend + direct labels, table view.
+function lineChart(id, { series, labels, fmtv, height = 190, title, unit, width = 640 }) {
+  const W = width, H = height, L = 46, R = series.length > 1 ? 56 : 14, Tp = 10, B = 24;
+  const max = niceMax(Math.max(...series.flatMap(s => s.values)) * 1.08);
+  const x = i => L + i * (W - L - R) / Math.max(1, labels.length - 1);
+  const y = v => H - B - v / max * (H - Tp - B);
+  const ticks = [0, .25, .5, .75, 1].map(f => f * max);
+  const step = Math.ceil(labels.length / 6);
+  CHARTS[id] = { series, labels, fmtv, x, W, L, R };
+  const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,0.07)"/>
+    <text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="10.5" fill="rgba(241,247,242,0.45)" font-family="JetBrains Mono">${fmtv(v)}</text>`).join("");
+  const xl = labels.map((l, i) => i % step === 0 ? `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10.5" fill="rgba(241,247,242,0.45)" font-family="JetBrains Mono">${l}</text>` : "").join("");
+  const paths = series.map(s => `<path d="${s.values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("")}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`).join("");
+  const ends = series.map(s => ({ name: s.name, y: y(s.values[s.values.length - 1]) + 4 })).sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 14);
+  const direct = series.length > 1 && series.length <= 4 ? ends.map(e => `<text x="${W - R + 8}" y="${e.y}" font-size="11" fill="rgba(241,247,242,0.75)">${e.name}</text>`).join("") : "";
+  const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("")}</div>` : "";
+  const table = `<details class="tbl"><summary>View as table</summary><table><tr><th>${unit || "t"}</th>${series.map(s => `<th class="num">${s.name}</th>`).join("")}</tr>
+    ${labels.map((l, i) => `<tr><td class="mono">${l}</td>${series.map(s => `<td class="num">${fmtv(s.values[i])}</td>`).join("")}</tr>`).join("")}</table></details>`;
+  return `<div class="chart-title"><b>${title}</b></div>${legend}<div class="chart" data-chart="${id}">
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">${grid}${xl}${paths}${direct}
+      <line class="xh" x1="0" x2="0" y1="${Tp}" y2="${H - B}" stroke="rgba(241,247,242,0.35)" stroke-dasharray="3 3" visibility="hidden"/>
+      ${series.map((s, k) => `<circle class="dot${k}" r="4" fill="${s.color}" stroke="#0D120F" stroke-width="2" visibility="hidden"/>`).join("")}
+      <rect x="${L}" y="${Tp}" width="${W - L - R}" height="${H - Tp - B}" fill="transparent" class="hit"/>
+    </svg><div class="tip"></div></div>${table}`;
+}
+document.addEventListener("mousemove", e => {
+  const rect = e.target.closest && e.target.closest(".chart rect.hit");
+  document.querySelectorAll(".chart").forEach(c => {
+    if (rect && c.contains(rect)) return;
+    c.querySelector(".tip").style.display = "none";
+    c.querySelectorAll(".xh, circle").forEach(n => n.setAttribute("visibility", "hidden"));
+  });
+  if (!rect) return;
+  const box = rect.closest(".chart"), cfg = CHARTS[box.dataset.chart], svg = box.querySelector("svg");
+  const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) * cfg.W / r.width;
+  const n = cfg.labels.length, i = Math.max(0, Math.min(n - 1, Math.round((sx - cfg.L) / ((cfg.W - cfg.L - cfg.R) / Math.max(1, n - 1)))));
+  const xh = svg.querySelector(".xh"); xh.setAttribute("x1", cfg.x(i)); xh.setAttribute("x2", cfg.x(i)); xh.setAttribute("visibility", "visible");
+  cfg.series.forEach((s, k) => { const d = svg.querySelector(`.dot${k}`);
+    const seg = svg.querySelectorAll("path")[k].getAttribute("d").split(/[ML]/).filter(Boolean)[i].split(",");
+    d.setAttribute("cx", seg[0]); d.setAttribute("cy", seg[1]); d.setAttribute("visibility", "visible"); });
+  const tip = box.querySelector(".tip");
+  tip.innerHTML = `<div class="mono faint" style="margin-bottom:4px">${cfg.labels[i]}</div>` + cfg.series.map(s => `<div class="row"><span><i style="background:${s.color}"></i> ${s.name}</span><b class="mono">${cfg.fmtv(s.values[i])}</b></div>`).join("");
+  tip.style.display = "block";
+  const px = cfg.x(i) / cfg.W * r.width;
+  tip.style.left = Math.min(px + 12, r.width - tip.offsetWidth) + "px"; tip.style.top = "8px";
+});
+
+// ================================================================== routing
+const routes = { "": home, app: home, ops: opsView, eng: engView };
+function route() { return location.hash.replace(/^#\/?/, "").split("/"); }
+function render() {
+  const [top] = route(), cur = top === "app" ? "" : top;
+  document.getElementById("nav").innerHTML = [["", "Demo", "Demo"], ["ops", "Operations", "Ops"], ["eng", "Engineering", "Eng"]]
+    .map(([r, n, s]) => `<a href="#/${r}" class="${r === cur ? "on" : ""}"><span class="full">${n}</span><span class="short">${s}</span></a>`).join("");
+  document.getElementById("view").innerHTML = (routes[top] || home)();
+  S.animate = null;
+}
+window.addEventListener("hashchange", async () => {
+  render(); scrollTo(0, 0);
+  const [top] = route();
+  if (top === "ops" && SESSION) { await refreshOps(); render(); }
+  if (top === "eng") { await refreshStatus(); render(); }
+});
+
+// ================================================================== demo: the app and its trace
+function deps() {
+  const st = S.status, svc = k => st && st.services[k];
+  const lat = k => svc(k) ? `p95 ${fmtMs(svc(k).p95_us / 1000)}` : "";
+  const bank = S.me ? (isSim() ? ["Bank simulator", "Column's API, in-process", lat("bank-sim")] : ["Column", "bank · ACH sandbox", lat("column")]) : ["Column", "bank · ACH sandbox", ""];
+  return [bank, ["Plaid", "balance before pulls", lat("plaid")], ["OpenAI", "ops reports", lat("openai")], ["AWS us-west-2", "EKS · RDS · Redis", ""]];
+}
+function home() {
+  if (S.fatal) return `<div class="wrap"><div class="card pad" style="margin-top:30px"><h2 class="t">Fern is unavailable</h2><p class="muted">${esc(S.fatal)}</p></div></div>`;
+  if (S.join) return joinView();
+  return `<div class="wrap">
+    <section class="intro">
+      <div><h1>Fern</h1><p>A working neobank backend: a double-entry ledger on Postgres, ACH through Column, account data through Plaid, ops reports by an OpenAI model, running on AWS. Run a case on the phone. The panel on the right is the real trace the request left: every service it passed through, every SQL statement, every bank call.</p></div>
+      <a class="deps" href="#/eng" title="Architecture and live status">${deps().map(([n, r, m]) => `<div class="dep"><i></i><div><b>${n}</b><span>${r}</span></div><span class="mono">${m}</span></div>`).join("")}</a>
+    </section>
+    ${rail()}
+    <div class="mobile-tabs"><button class="btn sm ${S.pane === "app" ? "primary" : ""}" onclick="S.pane='app';render()">App</button><button class="btn sm ${S.pane === "trace" ? "primary" : ""}" onclick="S.pane='trace';render()">Trace${S.traces.length ? ` · ${S.traces.length}` : ""}</button></div>
+    <div class="split" data-pane="${S.pane}">${phone()}${tracePanel()}</div></div>`;
+}
+function joinView() {
+  return `<div class="wrap"><div class="card pad" style="margin:30px auto;max-width:640px"><h2 class="t">All new demo spaces are taken</h2>
+    <p class="muted">Each space is a pre-funded account at the ${S.me ? bankName() : "bank sandbox"}. You can join one someone else opened; you'll see what they did.</p>
+    ${S.join.length ? `<table><tr><th>Space</th><th>Opened</th><th></th></tr>${S.join.map(s => `<tr><td class="mono">${esc(String(s.space_id || s.id).slice(0, 8))}</td><td class="faint small">${esc(s.claimed_at || s.created_at || "")}</td><td style="text-align:right"><button class="btn sm primary" onclick="joinSpace('${esc(s.space_id || s.id)}')">Join</button></td></tr>`).join("")}</table>`
+      : `<div class="empty">No spaces to join yet. Try again in a minute.</div>`}</div></div>`;
+}
+function done() {
+  const t = S.transfers, ev = (x, e) => x.events.includes(e);
+  return {
+    s1: t.some(x => x.kind === "payroll"),
+    s2: t.some(x => x.kind === "pull" && x.counterparty_name !== "RETURN_UNAUTH" && ev(x, "funds_available")),
+    s3: t.some(x => x.kind === "p2p"),
+    s4: t.some(x => x.kind === "withdrawal" && ["processing", "settled"].includes(x.status)),
+    s5: t.some(x => x.kind === "pull" && x.status === "returned"),
+  };
+}
+function rail() {
+  const d = done(), steps = [["s1", "Get paid"], ["s2", "Add money"], ["s3", "Pay Alex"], ["s4", "Withdraw"], ["s5", "Chargeback"]];
+  const next = steps.find(([k]) => !d[k]);
+  return `<div class="rail-wrap">
+    <div class="rail">${steps.map(([k, n], i) => `<button class="step ${d[k] ? "done" : ""} ${next && next[0] === k ? "next" : ""}" onclick="act('${k}')" ${S.busy ? "disabled" : ""}><span class="num">${d[k] ? "✓" : `S${i + 1}`}</span>${n}</button>`).join("")}</div>
+    <div class="clock">${S.busy ? `<span class="chip c-blue breathe">${esc(S.busy)}…</span>` : `<span class="t">Demo clock</span>`}<button class="btn sm" onclick="act('advance')" ${S.busy ? "disabled" : ""}>Advance clock ⏵</button></div>
+  </div><p class="hint">${hintText()}</p>`;
+}
+function hintText() {
+  const d = done(), t = S.transfers;
+  if (!S.me) return "Opening a demo space…";
+  if (!d.s1) return `Start with <b>Get paid</b>: $2,000 of payroll arrives at the ${bankName()} and is booked once.`;
+  const pull = t.find(x => x.kind === "pull" && x.counterparty_name !== "RETURN_UNAUTH");
+  if (!pull) return "Next, <b>Add money</b>: pull $500 from a linked account. Plaid checks the balance, then Column gets an ACH debit.";
+  if (!d.s2) return pull.status === "failed" ? "The pull failed. See the trace for why, then try again."
+    : `The pull is ${pull.status}. Press <b>Advance clock</b> ${pull.status === "processing" ? "to settle it at the bank" : "again to release the hold"}. Each press stands in for business days.`;
+  if (!d.s3) return "<b>Pay Alex</b> $50. Instant, because it never leaves the ledger: no bank in the trace.";
+  if (t.some(x => x.status === "unknown")) return "The bank's reply was lost, so the money stays held. Press <b>Run recovery</b> in the trace panel.";
+  if (!d.s4) return "<b>Withdraw</b> most of it. Leave the drill on: the bank accepts the transfer but its reply never arrives.";
+  if (!d.s5) return isSim() ? "Now the <b>Chargeback</b>: the $500 pull comes back as unauthorized (R10) after it was spent."
+    : "Now the <b>Chargeback</b>: a pull from an account whose owner disputes it. Column returns it (R29) at settlement.";
+  const neg = me() && me().balance_minor < 0;
+  if (neg) return `Jordan is negative. Open <a href="#/ops"><b>Operations</b></a> to write it off with two approvals.`;
+  return `All five done. See <a href="#/eng/architecture"><b>the architecture</b></a>, <a href="#/eng/api"><b>the API</b></a> or <a href="#/ops"><b>reconciliation</b></a>.`;
+}
+function phone() {
+  const c = me();
+  if (!c) return `<div class="phone"><div class="statusbar"><span>9:41</span><span>Fern</span></div><div class="empty">Opening your demo space…</div></div>`;
+  const neg = c.balance_minor < 0;
+  const items = S.transfers.map(t => `<div class="item ${S.detail && S.detail.transfer.id === t.id ? "sel" : ""}" onclick="openDetail('${t.id}')">
+      <div class="icon">${icon(t)}</div><div class="mid"><div class="ttl">${esc(titleOf(t))}</div>${chip(shown(t))}</div>
+      <div class="amt ${incoming(t) && !["returned", "failed"].includes(t.status) ? "in" : ""}">${incoming(t) ? "+" : "−"}${fmt(t.amount_minor)}</div></div>`).join("");
+  return `<div class="phone">
+    <div class="statusbar"><span>9:41</span><span>${esc(c.display_name)}</span></div>
+    ${neg ? `<div class="banner">Account frozen: your balance is negative.</div>` : ""}
+    <div class="bal-label">Balance</div>
+    <div class="balance ${neg ? "neg" : ""}">${fmt(c.balance_minor)}</div>
+    <div class="subbal"><span title="What you can spend right now">Available <b>${fmt(c.available_minor)}</b></span>
+      <span title="Reserved for withdrawals the bank hasn't confirmed yet">Held <b>${fmt(c.held_minor)}</b></span>
+      <span title="Money pulled in that hasn't cleared its hold period">On hold <b>${fmt(c.restricted_minor)}</b></span></div>
+    <div class="actions"><button class="btn" onclick="act('s2')" ${neg || S.busy ? "disabled" : ""}>Add money</button>
+      <button class="btn" onclick="sheet('send')" ${neg || S.busy ? "disabled" : ""}>Send</button>
+      <button class="btn primary" onclick="sheet('withdraw')" ${neg || S.busy ? "disabled" : ""}>Withdraw</button></div>
+    <div class="act-title">Activity</div>
+    ${items || `<div class="empty">No activity yet. Start with “Get paid”.</div>`}
+    <div class="faint small" style="padding:14px 6px 0">Space <span class="mono">${esc(String(SESSION.space_id).slice(0, 8))}</span> · <a class="lnk" href="javascript:void 0" onclick="newSpace()">start over</a></div>
+    ${S.sheet ? sheetView() : ""}</div>`;
+}
+function sheetView() {
+  const c = me();
+  let body = "";
+  if (S.sheet.kind === "send") {
+    body = `<h3>Send to Alex</h3><div class="field"><label>Amount · available ${fmt(c.available_minor)}</label><input id="amt" type="number" value="50" min="1" step="0.01"></div>
+      <p class="faint small" style="margin:0 6px 14px">Instant. Moves between two deposit accounts in our ledger.</p>
+      <button class="btn primary" style="width:100%" onclick="submitSheet()">Send</button>`;
+  } else if (S.sheet.kind === "withdraw") {
+    const suggested = Math.max(0, Math.min(230000, c.available_minor)) / 100;
+    body = `<h3>Withdraw</h3>
+      <div class="field"><label>Amount · available ${fmt(c.available_minor)}</label><input id="amt" type="number" value="${suggested}" min="1" step="0.01"></div>
+      <div class="field"><label>To</label><input type="text" value="${EXT_ACCT}" disabled></div>
+      <label class="toggle"><input id="drill" type="checkbox" checked><span><b>Failure drill:</b> the ${bankName()} accepts this transfer but its reply never arrives.</span></label>
+      <button class="btn primary" style="width:100%" onclick="submitSheet()">Withdraw</button>`;
+  } else if (S.detail) {
+    const { transfer: t, timeline, journals } = S.detail, t0 = new Date(t.created_at).getTime();
+    const full = S.transfers.find(x => x.id === t.id) || { ...t, events: [] };
+    const rel = at => { const s = (new Date(at).getTime() - t0) / 1000; return s < 1 ? `+${Math.round(s * 1000)} ms` : s < 120 ? `+${s.toFixed(1)} s` : `+${(s / 60).toFixed(1)} min`; };
+    body = `<h3>${esc(titleOf(full))}</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="mono" style="font-size:22px">${incoming(full) ? "+" : "−"}${fmt(t.amount_minor)}</span>${chip(shown(full))}</div>
+      <ul class="steps">${timeline.map(e => { const [txt, col, real] = STEP[e.event] || [e.event.replace(/_/g, " "), "green"];
+        const extra = e.event === "returned" && t.return_code ? ` · ${esc(t.return_code)}` : "";
+        return `<li class="${col}">${txt}${extra}<div class="when">${rel(e.occurred_at)}${real ? ` · <span class="real">${real}</span>` : ""}</div></li>`; }).join("")}</ul>
+      ${t.failure_reason ? `<div class="callout red">${esc(t.failure_reason)}</div>` : ""}
+      ${journals.length ? `<div class="act-title">Ledger</div>${journals.map(j => `<div class="kv"><span class="mono" style="color:var(--fern);font-size:12px">${esc(j.effect)}</span><b>${fmt(j.amount_minor)}</b></div>`).join("")}` : ""}
+      ${S.refs[t.id] ? `<button class="btn sm ghost" style="margin-top:10px" onclick="S.sheet=null;pickTrace('${S.refs[t.id]}')">View its trace</button>` : ""}
+      <button class="btn ghost" style="width:100%;margin-top:8px" onclick="S.sheet=null;S.detail=null;render()">Close</button>`;
+  }
+  return `<div class="sheet-bg" onclick="if(event.target===this){S.sheet=null;render()}"><div class="sheet"><div class="grab"></div>${body}</div></div>`;
+}
+
+// ---- service map: the nodes a trace passed through
+const MAP = { caller: [62, 96], cloudflare: [190, 96], tunnel: [322, 96], api: [468, 96], postgres: [400, 186], redis: [540, 186], column: [790, 56], plaid: [790, 121], openai: [790, 186] };
+const MAP_SUB = { cloudflare: "Worker · edge", tunnel: "Tunnel · in EKS", api: "EKS · FastAPI", postgres: "RDS · PG 16", redis: "ElastiCache", column: "bank · ACH", plaid: "account data", openai: "AI reports" };
+const MAP_EDGES = [["caller", "cloudflare"], ["cloudflare", "tunnel"], ["tunnel", "api"], ["api", "postgres"], ["api", "redis"], ["api", "column"], ["api", "plaid"], ["api", "openai"]];
+const HW = 58, HH = 20;
+function clip([x1, y1], [x2, y2]) {
+  const dx = x2 - x1, dy = y2 - y1, t = Math.min(HW / Math.abs(dx || 1e-9), HH / Math.abs(dy || 1e-9));
+  return [x1 + dx * t, y1 + dy * t];
+}
+function edgePath(a, b) {
+  if (a === "caller" && b === "api") return "M62,76 V36 H468 V74"; // a local run: no Cloudflare in front
+  const [p, q2] = [clip(MAP[a], MAP[b]), clip(MAP[b], MAP[a])];
+  return `M${p[0].toFixed(1)},${p[1].toFixed(1)} L${q2[0].toFixed(1)},${q2[1].toFixed(1)}`;
+}
+function serviceMap(tr) {
+  const used = new Set(tr ? tr.services : []), stats = {}, hops = [];
+  const edges0 = [...MAP_EDGES];
+  if (tr) {
+    used.add("caller");
+    if (tr.edge) for (const k of ["caller>cloudflare", "cloudflare>tunnel", "tunnel>api"]) { stats[k] = { n: 1 }; hops.push(k); }
+    else { edges0.push(["caller", "api"]); stats["caller>api"] = { n: 1 }; hops.push("caller>api"); }
+    for (const s of tr.spans) {
+      if (!s.parent) continue;
+      const a = NODE(s.parent.svc), b = NODE(s.svc);
+      if (a === b) continue;
+      const k = `${a}>${b}`;
+      (stats[k] = stats[k] || { n: 0 }).n++;
+      if (s.status === "error") stats[k].err = s.attrs["error.type"] || "error";
+      if (hops[hops.length - 1] !== k) hops.push(k);
+    }
+  }
+  const unit = (b, n) => b === "postgres" ? (n === 1 ? "query" : "queries") : b === "redis" ? (n === 1 ? "cmd" : "cmds") : (n === 1 ? "call" : "calls");
+  const edges = edges0.map(([a, b]) => {
+    const st = stats[`${a}>${b}`], on = !!st, d = edgePath(a, b);
+    const col = on ? (st.err ? "#FF6F61" : tierHex(b === "api" ? "api" : b)) : "rgba(255,255,255,0.13)";
+    let label = "";
+    if (on && a === "api") {
+      const m = d.match(/[-\d.]+/g).map(Number), f = b === "redis" ? 0.7 : 0.45;
+      const mx = m[0] + (m[m.length - 2] - m[0]) * f, my = m[1] + (m[m.length - 1] - m[1]) * f;
+      const below = b === "postgres" || b === "redis";
+      label = `<text x="${below ? mx + (b === "postgres" ? -8 : 8) : mx}" y="${below ? my + 4 : my - 6}" text-anchor="${below ? (b === "postgres" ? "end" : "start") : "middle"}" font-size="10.5" fill="#F1F7F2" font-family="JetBrains Mono" paint-order="stroke" stroke="#0D120F" stroke-width="4">${st.err ? esc(/Unknown|Timeout/.test(st.err) ? "no reply" : "error") : `${st.n} ${unit(b, st.n)}`}</text>`;
+    }
+    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="${on ? 1.8 : 1.2}" ${on ? "" : 'stroke-dasharray="3 4"'} marker-end="url(#${on ? "am" : "ad"})"/>${label}`;
+  }).join("");
+  const sim = tr ? tr.spans.some(s => s.svc === "bank-sim") : isSim();
+  const nodes = Object.entries(MAP).map(([k, [x, y]]) => {
+    const on = used.has(k), tierCol = k === "caller" ? "#F1F7F2" : tierHex(k);
+    const name = k === "caller" ? "Browser" : k === "column" && sim ? "bank-sim" : svcName(k);
+    const sub = k === "caller" ? (tr && !tr.edge ? "direct (local)" : "caller") : k === "column" && sim ? "Column's API, in-process" : MAP_SUB[k];
+    return `<g opacity="${!tr || on ? 1 : 0.38}"><rect x="${x - HW}" y="${y - HH}" width="${HW * 2}" height="${HH * 2}" rx="9" fill="#101713" stroke="${on ? tierCol : "rgba(255,255,255,0.16)"}" stroke-width="${on ? 1.6 : 1}"/>
+      <text x="${x}" y="${y - 3}" text-anchor="middle" font-size="11" font-weight="600" fill="#F1F7F2">${name}</text>
+      <text x="${x}" y="${y + 11}" text-anchor="middle" font-size="9.5" fill="rgba(241,247,242,0.55)">${sub}</text></g>`;
+  }).join("");
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const packets = tr && S.animate === tr.id && !still ? hops.map((k, i) => {
+    const [a, b] = k.split(">"); if (!edges0.some(([x, y]) => x === a && y === b)) return "";
+    const begin = (0.15 + i * 0.2).toFixed(2), col = tierHex(b);
+    return `<circle r="4.5" fill="${col}" opacity="0"><animateMotion dur=".38s" begin="${begin}s" fill="freeze" path="${edgePath(a, b)}"/>
+      <set attributeName="opacity" to="1" begin="${begin}s"/><set attributeName="opacity" to="0" begin="${(+begin + .38).toFixed(2)}s"/></circle>`;
+  }).join("") : "";
+  const group = (x, y, w, h, label) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="rgba(255,255,255,0.015)" stroke="rgba(255,255,255,0.1)"/>
+    <text x="${x + 10}" y="${y + 14}" font-size="9" font-weight="600" letter-spacing="0.08em" fill="rgba(241,247,242,0.42)">${label}</text>`;
+  return `<svg class="svcmap" viewBox="0 0 860 240" role="img" aria-label="Services this request passed through">
+    <defs>${["am", "ad"].map(id => `<marker id="${id}" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="${id === "am" ? "#F1F7F2" : "rgba(255,255,255,0.25)"}" opacity="${id === "am" ? 0.7 : 1}"/></marker>`).join("")}</defs>
+    ${group(126, 52, 128, 82, "CLOUDFLARE")}${group(258, 52, 352, 166, "AWS · US-WEST-2 · VPC")}${group(722, 14, 136, 202, "THIRD-PARTY APIS")}
+    ${edges}${nodes}${packets}</svg>`;
+}
+function tierLegend() {
+  return `<div class="tier-legend">${Object.values(TIER).map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("")}</div>`;
+}
+function tracePanel() {
+  const tr = S.traces.find(x => x.id === S.trace);
+  if (!tr) return `<div class="card trace"><div class="trace-empty">${serviceMap(null)}${tierLegend()}
+    <p>Run a case. Each request leaves a trace: the services it passed through, every SQL statement, every bank call, and the ledger entries it posted.</p></div></div>`;
+  const unknown = S.transfers.filter(t => t.status === "unknown");
+  return `<div class="card trace">
+    <div class="trace-list">${S.traces.slice(0, 14).map(x => `<button class="tchip ${x.id === tr.id ? "on" : ""} ${x.status === "error" ? "bad" : ""}" onclick="pickTrace('${x.id}')"><span class="case-tag">${x.meta.tag}</span>${esc(x.meta.title)}<span class="mono faint">${fmtMs(x.total)}</span></button>`).join("")}</div>
+    <div class="trace-head"><div class="th-title"><span class="case-tag">${tr.meta.tag}</span><b>${esc(tr.meta.label)}</b>${statusChip(tr)}</div>
+      <div class="th-meta">${fmtMs(tr.total)} · ${tr.spans.length} spans · ${new Set(tr.spans.map(s => s.svc)).size} services · trace ${tr.id.slice(0, 16)}</div></div>
+    ${unknown.length ? `<div class="callout amber" style="margin:12px 0 0;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>${unknown.length} withdrawal${unknown.length > 1 ? "s" : ""} waiting on the bank. The money is held. Recovery retries with the same Idempotency-Key.</span><button class="btn sm primary" onclick="act('recover')" ${S.busy ? "disabled" : ""}>Run recovery</button></div>` : ""}
+    <div class="svcmap-wrap">${serviceMap(tr)}</div>${tierLegend()}
+    ${waterfall(tr)}${spanDetail(tr)}${ledgerResult(tr)}</div>`;
+}
+function waterfall(tr) {
+  const hidden = s => { for (let p = s.parent; p; p = p.parent) if (p.tx && !S.open[p.id]) return true; return false; };
+  const rows = tr.spans.filter(s => !hidden(s));
+  const raw = tr.total / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), m = [1, 2, 2.5, 5, 10].find(m => m * p >= raw), stepMs = m * p;
+  const ticks = []; for (let t = 0; t < tr.total * 0.98; t += stepMs) ticks.push(t);
+  const pct = v => (v / tr.total * 100).toFixed(3);
+  const grid = ticks.slice(1).map(t => `<div class="wf-grid" style="left:${pct(t)}%"></div>`).join("");
+  const count = s => { let n = 0; (function c(x) { for (const k of x.kids) { if (k.svc === "postgres") n++; c(k); } })(s); return n; };
+  return `<div class="wf" role="table" aria-label="Trace waterfall">
+    <div class="wf-row wf-head"><div class="wf-name" style="padding-left:10px">Service · operation</div><div class="wf-track">${ticks.map(t => `<span style="left:${pct(t)}%">${t ? (t >= 1000 ? `${+(t / 1000).toFixed(2)} s` : `${+t.toFixed(2)} ms`) : "0"}</span>`).join("")}</div></div>
+    ${rows.map(s => {
+      const left = Math.min(s.start / tr.total * 100, 99.6), w = Math.max(Math.min(s.dur / tr.total * 100, 100 - left), 0.4), end = left + w, err = s.status === "error";
+      const inside = end >= 78 && w >= 18;
+      const dur = end < 78 ? `left:calc(${end.toFixed(3)}% + 6px)` : inside ? `right:calc(${(100 - end).toFixed(3)}% + 6px);color:#04110A;font-weight:500` : `right:calc(${(100 - left).toFixed(3)}% + 6px)`;
+      return `<div class="wf-row ${s.id === S.span ? "on" : ""} ${err ? "err" : ""}" role="row" tabindex="0" onclick="pickSpan('${s.id}')" onkeydown="if(event.key==='Enter')pickSpan('${s.id}')">
+        <div class="wf-name" style="padding-left:${s.depth * 12 + 8}px">${s.tx ? `<button class="caret" aria-label="${S.open[s.id] ? "Collapse" : "Expand"} statements" onclick="event.stopPropagation();toggleTx('${s.id}')"><svg width="10" height="10" viewBox="0 0 10 10" style="transform:rotate(${S.open[s.id] ? 90 : 0}deg)"><path d="M3 1.5 L7 5 L3 8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>` : `<span class="caret"></span>`}<i style="background:${tierHex(s.svc)}"></i><span class="svc">${esc(svcName(s.svc))}</span><span class="op">${esc(s.op)}</span>${s.tx && !S.open[s.id] ? `<span class="n">${count(s)} SQL</span>` : ""}</div>
+        <div class="wf-track">${grid}<div class="wf-bar" style="left:${left.toFixed(3)}%;width:${w.toFixed(3)}%;background:${err ? "var(--red)" : tierHex(s.svc)}"></div><span class="wf-dur" style="${dur}">${fmtMs(s.dur)}</span></div></div>`;
+    }).join("")}</div>`;
+}
+function spanDetail(tr) {
+  const s = tr.spans.find(x => x.id === S.span) || tr.root;
+  const big = ["db.statement", "http.request.body"];
+  const attrs = Object.entries(s.attrs).filter(([k]) => !big.includes(k));
+  const stmts = [];
+  if (s.tx) (function c(x) { for (const k of x.kids) { if (k.attrs["db.statement"]) stmts.push(k.attrs["db.statement"]); c(k); } })(s);
+  return `<div class="span-detail">
+    <div class="sd-head"><i style="background:${tierHex(s.svc)}"></i><b>${esc(svcName(s.svc))}</b><span class="mono">${esc(s.op)}</span><span class="mono faint">${fmtMs(s.dur)} · at +${fmtMs(s.start)}</span>${s.status === "error" ? `<span class="chip c-red">error</span>` : ""}</div>
+    ${s.attrs["db.statement"] ? `<pre class="code">${hl(s.attrs["db.statement"])}</pre>` : ""}
+    ${s.attrs["http.request.body"] ? `<div class="codefile mono">request body${s.attrs.idempotency_key ? ` · Idempotency-Key: ${esc(s.attrs.idempotency_key)}` : ""}</div><pre class="code">${esc(pretty(s.attrs["http.request.body"]))}</pre>` : ""}
+    ${stmts.length ? `<div class="codefile mono">statements in this transaction</div><pre class="code">${hl(stmts.map(x => x.length > 140 ? x.slice(0, 140) + " …" : x).join("\n"))}</pre>` : ""}
+    <div class="attrs">${attrs.map(([k, v]) => `<span class="k">${esc(k)}</span><span class="v">${esc(typeof v === "object" ? JSON.stringify(v) : v)}</span>`).join("")}</div></div>`;
+}
+function ledgerResult(tr) {
+  const js = tr.journals, after = tr.after;
+  const why = tr.spans.some(s => s.status === "error" && OUTBOUND.has(s.svc)) ? "Nothing posted: the bank's answer is unknown, so only the hold exists until a same-key retry confirms the transfer."
+    : "No journals: nothing moved in the books.";
+  return `<div class="trace-ledger"><h3 class="k">Ledger entries posted by this trace</h3>
+    ${js.length ? `<table><tr><th>Effect</th><th>Debit</th><th>Credit</th><th class="num">Amount</th></tr>${js.map(j => { const a = j.attrs;
+      return `<tr><td class="mono" style="color:var(--fern)">${esc(a["ledger.effect"])}</td><td>${esc(acctName(a["ledger.debit"], a["ledger.debit_customer_id"]))}</td><td>${esc(acctName(a["ledger.credit"], a["ledger.credit_customer_id"]))}</td><td class="num">${fmt(a["ledger.amount_minor"])}</td></tr>`; }).join("")}</table>`
+      : `<div class="faint small">${why}</div>`}
+    ${after ? `<div class="after"><span>Jordan after this: balance <b>${fmt(after.balance)}</b> · available <b>${fmt(after.available)}</b></span><span class="${after.ok ? "ok" : "bad"}">${after.ok ? "✓ debits = credits · balances match postings" : "✕ ledger invariant failed"}</span></div>` : ""}</div>`;
+}
+function pickTrace(id) { const tr = S.traces.find(x => x.id === id); if (!tr) return; S.trace = id; S.span = tr.focus; S.pane = "trace"; if (location.hash.replace(/^#\/?/, "") !== "") location.hash = "#/"; else render(); }
+function pickSpan(id) { S.span = id; render(); }
+function toggleTx(id) { S.open[id] = !S.open[id]; render(); }
+function viewRef(ref) { if (S.refs[ref]) pickTrace(S.refs[ref]); else toast("That request ran before this page loaded; its trace is in the list on the Demo page."); }
+
+// ================================================================== operations
+const KIND = { missing_in_books: "At the bank, not in our books", missing_at_bank: "In our books, not at the bank", amount_mismatch: "Amounts differ",
+  in_flight_unconfirmed: "Bank moved money for a transfer we still call unknown", balance_mismatch: "Balances differ" };
+function attention(o) {
+  const items = [], traceBtn = ref => S.refs[ref] ? `<button class="btn sm ghost" onclick="viewRef('${ref}')">Trace</button>` : "";
+  for (const t of o.queue.filter(t => t.status === "unknown"))
+    items.push(["var(--amber)", `Withdrawal ${fmt(t.amount_minor)}: bank outcome unknown`, "The bank didn't answer. The money is held, not lost. Recovery retries with the same Idempotency-Key and books what the bank says.", `<button class="btn sm primary" onclick="act('recover')">Run recovery now</button>${traceBtn(t.id)}`]);
+  for (const t of o.queue.filter(t => t.status === "manual_review"))
+    items.push(["var(--red)", `${t.kind} ${fmt(t.amount_minor)} needs review`, "The bank's record didn't match our request. Nothing was booked; a person decides.", traceBtn(t.id)]);
+  const pending = o.write_offs.find(w => w.status === "pending");
+  for (const n of o.negative_balances) if (!pending)
+    items.push(["var(--red)", `${esc(n.name)} is ${fmt(n.balance_minor)} after a returned pull`, "Sending and withdrawing are frozen. A write-off moves the loss to Return losses; cash at the bank doesn't change. It needs two people.", `<button class="btn sm primary" onclick="act('requestWriteOff')">Request write-off</button>`]);
+  if (pending)
+    items.push(["var(--amber)", `Write-off of ${fmt(pending.amount_minor)} waiting for a second approver`, `Requested by <span class="mono">${esc(pending.requested_by)}</span>. The database rejects an approval from the same person (CHECK approved_by ≠ requested_by).`, `<button class="btn sm primary" onclick="act('approveWriteOff','${pending.id}')">Approve as second person</button>`]);
+  for (const e of o.reconciliation.exceptions.filter(e => e.status === "open"))
+    items.push(["var(--red)", `${KIND[e.kind] || e.kind}: ${fmt(e.amount_minor)}`, `${esc(e.detail)} · <span class="mono">${esc(e.provider_txn_id)}</span>`, `<button class="btn sm" onclick="act('escalate','${e.id}')">Escalate to the bank</button>`]);
+  return items;
+}
+function opsView() {
+  if (!SESSION) return home();
+  const o = S.ops;
+  if (!o) return `<div class="wrap"><div class="page-title"><h1>Operations</h1><p>Loading…</p></div></div>`;
+  const items = attention(o), last = o.reconciliation.last_run, diff = o.bank_minus_books;
+  const resolved = [
+    ...o.write_offs.filter(w => w.status === "approved").map(w => `Write-off of ${fmt(w.amount_minor)} approved by <span class="mono">${esc(w.approved_by)}</span>.`),
+    ...o.reconciliation.exceptions.filter(e => e.status !== "open").map(e => `${KIND[e.kind] || e.kind} ${fmt(e.amount_minor)}: ${e.status}${e.note ? ` · ${esc(e.note)}` : ""}`),
+  ];
+  const custs = (S.me ? S.me.customers : []);
+  const rep = S.report, content = rep && rep.content;
+  const sev = { high: "c-red", medium: "c-amber", low: "c-grey", info: "c-grey" };
+  return `<div class="wrap"><div class="page-title"><h1>Operations</h1><p>One screen for support, risk and finance: what needs a person, whether the books match the bank, and the daily report.</p></div>
+    <div class="stack" style="padding-bottom:60px">
+    <div class="grid g4">
+      <div class="card stat ${o.books_balance ? "good" : "warn"}"><div class="lbl">Ledger</div><div class="val">${o.books_balance ? "Balanced" : "Unbalanced"}</div><div class="sub">debits = credits · balances = postings</div></div>
+      <div class="card stat ${diff ? "warn" : diff === 0 ? "good" : ""}"><div class="lbl">Bank minus our books</div><div class="val">${diff == null ? "—" : fmt(diff)}</div><div class="sub">${last ? `last reconciled ${new Date(last.started_at).toLocaleTimeString()}` : "not reconciled yet"}</div></div>
+      <div class="card stat ${o.needs_a_person ? "warn" : "good"}"><div class="lbl">Needs a person</div><div class="val">${o.needs_a_person}</div><div class="sub">${o.needs_a_person ? "see the queue below" : "nothing waiting"}</div></div>
+      <div class="card stat"><div class="lbl">Money in flight</div><div class="val">${fmt(o.in_flight_minor)}</div><div class="sub">ACH debits and credits not yet settled</div></div></div>
+    <div class="grid ops-main">
+      <div class="card pad"><h2 class="t">Needs a person</h2>
+        ${items.length ? items.map(([c, t, b, a]) => `<div class="attn"><span class="sev" style="background:${c}"></span><div class="body"><b>${t}</b><p>${b}</p></div><div class="acts">${a}</div></div>`).join("")
+          : `<div class="empty">Nothing is waiting. Run S4 with the drill or S5 in the demo, or inject a mismatch below, and the work shows up here.</div>`}
+        ${resolved.length ? `<h3 class="k">Resolved</h3>${resolved.map(d => `<div class="small muted" style="padding:4px 0">✓ ${d}</div>`).join("")}` : ""}</div>
+      <div class="card pad"><h2 class="t">Customers</h2><table><tr><th>Customer</th><th class="num">Balance</th><th class="num">Available</th><th>Status</th></tr>
+        ${custs.map(c => { const neg = c.balance_minor < 0;
+          return `<tr><td>${esc(c.display_name)}</td><td class="num" style="${neg ? "color:var(--red)" : ""}">${fmt(c.balance_minor)}</td><td class="num">${fmt(c.available_minor)}</td><td>${neg ? `<span class="chip c-red">Frozen</span>` : `<span class="chip c-green">Good</span>`}</td></tr>`; }).join("")}</table></div></div>
+    <div class="card pad"><div class="section-h"><h2 class="t">Reconciliation</h2>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm ghost" onclick="act('injectMismatch')" ${S.busy ? "disabled" : ""}>Inject a mismatch</button><button class="btn sm primary" onclick="act('reconcile')" ${S.busy ? "disabled" : ""}>Run reconciliation</button></div></div>
+      <p class="muted small" style="margin:0 0 14px">Lists the transactions on this space's account at the ${bankName()}, independently of webhooks, and matches each one to exactly one cash journal. “Inject a mismatch” moves $25 out at the bank without telling the ledger.</p>
+      <div class="grid g4">
+        <div><div class="faint small">Bank says</div><div class="mono" style="font-size:18px">${last && last.bank_balance != null ? fmt(last.bank_balance) : "—"}</div></div>
+        <div><div class="faint small">Our books say</div><div class="mono" style="font-size:18px">${last ? fmt(last.book_balance) : "—"}</div></div>
+        <div><div class="faint small">Matched</div><div class="mono" style="font-size:18px">${last ? `${last.matched} / ${last.scanned}` : "—"}</div></div>
+        <div><div class="faint small">Open exceptions</div><div class="mono" style="font-size:18px">${last ? last.open_exceptions : "—"}</div></div></div></div>
+    <div class="card pad"><div class="section-h"><h2 class="t">Daily report</h2><button class="btn sm primary" onclick="act('report')" ${S.busy ? "disabled" : ""}>${rep ? "Regenerate" : "Generate"}</button></div>
+      <p class="muted small" style="margin:0">Facts come from read-only queries; an OpenAI model drafts from them with a strict JSON schema and cites transfer ids. Without an API key (or over the daily budget) a rules-based report is written instead.</p>
+      ${content ? `<div class="report"><h4>${esc(content.headline)}</h4><p>${esc(content.summary)}</p>
+        ${(content.findings || []).map(f => `<div class="attn"><div class="body"><b>${esc(f.title)}</b> <span class="chip flat ${sev[f.severity] || "c-grey"}">${esc(f.severity)}</span><p>${esc(f.detail)} ${(f.transfer_ids || []).map(id => `<button class="cite" onclick="viewRef('${esc(id)}')">${esc(String(id).slice(0, 8))}</button>`).join(" ")}</p></div></div>`).join("")}
+        ${(content.actions || []).length ? `<h4>Actions</h4>${content.actions.map(a => `<div class="kv"><span>${esc(a.action)}</span><span class="faint small">${esc(a.owner)}</span></div>`).join("")}` : ""}</div>
+        <div class="ai-note">${rep.source !== "rules" ? `Drafted by ${esc(rep.model)} · ${rep.tokens_in} in / ${rep.tokens_out} out · $${((rep.cost_micros || 0) / 1e6).toFixed(4)}` : "Rules-based report (no model call)"} · a person reviews it before it's shared.</div>` : ""}</div>
+    </div></div>`;
+}
+
+// ================================================================== engineering: architecture, benchmark, API
+function engView() {
+  const tab = ["architecture", "benchmark", "api"].includes(route()[1]) ? route()[1] : "architecture";
+  const tabs = [["architecture", "Architecture"], ["benchmark", "Benchmark"], ["api", "API"]];
+  return `<div class="wrap"><div class="page-title eng-title"><div><h1>Engineering</h1><p>Python 3.13 · FastAPI · PostgreSQL 16 · Redis 7 · Column · Plaid · OpenAI · AWS EKS</p></div>
+    <nav class="seg">${tabs.map(([k, n]) => `<a href="#/eng/${k}" class="${k === tab ? "on" : ""}">${n}</a>`).join("")}</nav></div>
+    <div class="stack eng-body">${({ architecture: engArch, benchmark: engBench, api: engApi })[tab]()}</div></div>`;
+}
+const SAMPLE = what => `<div class="sample">◆ ${what}</div>`;
+const ms = us => us == null ? "—" : fmtMs(us / 1000);
+function svcStat(name) { const st = S.status; return st && st.services[name]; }
+function archSvg() {
+  const last = S.traces.find(t => t.id === S.trace), lit = new Set(last ? last.services : []);
+  const st = S.status, ck = st ? st.checks : {}, bank = st && st.config.bank === "sim" ? "bank-sim" : "column";
+  const metric = k => { const s = svcStat(k); return s ? `p95 ${ms(s.p95_us)} · ${s.calls} calls${s.errors ? ` · ${s.errors} err` : ""}` : "no calls in the last hour"; };
+  const N = (x, y, w, name, sub, m, svc, tier = "fern", h = 54, ok = true) => {
+    const on = svc && lit.has(svc), col = TIER[tier][2];
+    return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="#101713" stroke="${on ? col : "rgba(255,255,255,0.16)"}" stroke-width="${on ? 2 : 1}"/>
+      <rect x="${x}" y="${y + 12}" width="3" height="${h - 24}" rx="1.5" fill="${col}"/>
+      <text x="${x + 13}" y="${y + 19}" font-size="12" font-weight="600" fill="#F1F7F2">${name}</text>
+      <text x="${x + 13}" y="${y + 33}" font-size="10" fill="rgba(241,247,242,0.55)">${sub}</text>
+      ${m ? `<circle cx="${x + 16}" cy="${y + 44}" r="3" fill="${ok ? "#52E08A" : ok === null ? "rgba(241,247,242,0.4)" : "#FF6F61"}"/><text x="${x + 24}" y="${y + 47.5}" font-size="9.5" fill="rgba(241,247,242,0.78)" font-family="JetBrains Mono">${esc(m)}</text>` : ""}</g>`;
+  };
+  const G = (x, y, w, h, label, dash) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14" fill="${dash ? "none" : "rgba(255,255,255,0.015)"}" stroke="rgba(255,255,255,${dash ? 0.12 : 0.16})" ${dash ? 'stroke-dasharray="4 4"' : ""}/>
+    <text x="${x + 12}" y="${y + 16}" font-size="9.5" font-weight="600" letter-spacing="0.08em" fill="rgba(241,247,242,0.48)">${label}</text>`;
+  const E = (d, label, lx, ly, anchor = "start") => `<path d="${d}" fill="none" stroke="rgba(241,247,242,0.38)" stroke-width="1.3" marker-end="url(#aa)"/>${label ? `<text x="${lx}" y="${ly}" text-anchor="${anchor}" font-size="9.5" fill="rgba(241,247,242,0.6)" font-family="JetBrains Mono" paint-order="stroke" stroke="#0D120F" stroke-width="4">${label}</text>` : ""}`;
+  const req = st && st.requests;
+  return `<svg class="arch-svg" viewBox="0 0 1080 560" role="img" aria-label="Fern architecture on AWS with live status">
+    <defs><marker id="aa" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L8,4 L0,8 z" fill="rgba(241,247,242,0.55)"/></marker></defs>
+    ${G(165, 40, 170, 360, "CLOUDFLARE · WAKEN.DEV")}${G(360, 20, 460, 520, "AWS · US-WEST-2")}${G(375, 44, 430, 400, "VPC · NO NAT, NO INBOUND PORTS")}
+    ${G(390, 70, 400, 196, "EKS · 2 × T4G.MEDIUM (GRAVITON)")}${G(390, 290, 400, 140, "DATABASE SUBNETS", 1)}${G(850, 110, 215, 330, "THIRD-PARTY APIS")}
+    ${E("M145,137 H178", "HTTPS", 147, 130)}
+    ${E("M250,164 V218", "/apps/fern/*", 256, 196)}
+    ${E("M320,245 H348 V139 H398", "", 0, 0)}
+    ${E("M560,139 H588", "", 0, 0)}
+    ${E("M640,166 V290 H488 V316", "TCP 5432", 646, 284)}${E("M730,166 V348", "TCP 6379", 736, 300)}
+    ${E("M775,139 C 820,139 820,177 856,177", "", 0, 0)}${E("M775,139 C 820,139 820,277 856,277", "", 0, 0)}${E("M775,139 C 820,139 820,377 856,377", "", 0, 0)}
+    <text x="957" y="460" text-anchor="middle" font-size="9.5" fill="rgba(241,247,242,0.55)" font-family="JetBrains Mono">HTTPS egress from public subnets</text>
+    <text x="380" y="466" font-size="9.5" font-weight="600" letter-spacing="0.08em" fill="rgba(241,247,242,0.48)">REGIONAL SERVICES</text>
+    ${N(20, 110, 125, "Users", "browser · phone", "", "")}
+    ${N(180, 110, 140, "Worker fern-router", "strips /apps/fern", last && last.edge ? "on your last request" : "live / paused / archive", "cloudflare", "ext", 54, null)}
+    ${N(180, 218, 140, "Cloudflare Tunnel", "fern-origin.waken.dev", "", "tunnel", "ext")}
+    ${N(180, 318, 140, "GitHub Pages", "other paths · archive", "", "", "ext")}
+    ${N(400, 112, 160, "cloudflared ×2", "connects out to Cloudflare", "", "tunnel")}
+    ${N(590, 112, 185, "fern-api ×2", `FastAPI · ${st ? esc(st.instance) : "…"}`, req ? `p95 ${ms(req.p95_us)} · ${req.requests} writes/h` : "", "api", "fern", 54, ck.api ? ck.api.up : null)}
+    ${N(400, 190, 160, "Jobs (same image)", "migrations · account pool", st ? `pool ${st.pool.ready} ready` : "", "")}
+    ${N(400, 318, 175, "RDS PostgreSQL 16", "Multi-AZ · ledger, idempotency, traces", ck.postgres ? `up · ping ${ck.postgres.ping_ms} ms` : "", "postgres", "data", 54, ck.postgres ? ck.postgres.up : null)}
+    ${N(600, 350, 175, "ElastiCache Redis 7", "rate limit · token bucket", ck.redis ? (ck.redis.up ? `up · ping ${ck.redis.ping_ms} ms` : ck.redis.up === null ? "not configured" : "down · requests allowed") : "", "redis", "data", 54, ck.redis ? ck.redis.up : null)}
+    ${N(375, 476, 130, "ECR", "arm64 images", "", "")}${N(515, 476, 130, "k8s Secrets", "keys from Terraform", "", "")}
+    ${N(858, 150, 200, bank === "bank-sim" ? "Bank simulator" : "Column", bank === "bank-sim" ? "Column's API, in-process" : "bank · ACH · sandbox", metric(bank), "column", "ext", 54, svcStat(bank) ? !svcStat(bank).errors : null)}
+    ${N(858, 250, 200, "Plaid", st && st.config.plaid === "sandbox" ? "balance check · sandbox" : "balance check · simulator", metric("plaid"), "plaid", "ext", 54, svcStat("plaid") ? !svcStat("plaid").errors : null)}
+    ${N(858, 350, 200, "OpenAI API", st ? esc(st.config.ai) : "ops reports", metric("openai"), "openai", "ext", 54, svcStat("openai") ? !svcStat("openai").errors : null)}
+  </svg>`;
+}
+function engArch() {
+  const st = S.status, last = S.traces.find(t => t.id === S.trace);
+  if (!st) return `<div class="card pad"><div class="empty">Loading live status…</div></div>`;
+  const req = st.requests, bank = st.config.bank === "sim" ? "bank-sim" : "column";
+  const svc = [[bank, bank === "column" ? "Column" : "Bank simulator", bank === "column" ? "Bank. ACH out and in, one account per demo space." : "Column's API shape, in-process (local and CI).",
+      ["POST /transfers/ach", "GET  /transfers/ach/{id}", "POST /simulate/*  (sandbox only)"], "Timeout or 5xx → “unknown”, never “failed”. 429 → retry with Retry-After."],
+    ["plaid", "Plaid", `Balance before each pull · ${st.config.plaid}.`, ["POST /sandbox/public_token/create", "POST /item/public_token/exchange", "POST /accounts/balance/get"], "If Plaid is down, new pulls are refused. Nothing else depends on it."],
+    ["openai", "OpenAI", `Ops reports · ${esc(st.config.ai)}.`, ["POST /v1/responses  (strict JSON schema)"], "Daily budget reserved in Postgres before each call; over budget, refused or cut off, a rules report is written instead."]];
+  const card = ([k, name, role, uses, note]) => {
+    const s = st.services[k], series = s ? s.series : [];
+    const chart = series.length >= 2 ? lineChart(`lat-${k}`, { title: "p95 latency, 5-minute buckets", labels: series.map(p => new Date(p.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })), unit: "time", height: 150, width: 360, fmtv: v => v >= 1000 ? `${(v / 1000).toFixed(1)}s` : `${Math.round(v)}`, series: [{ name: "p95 ms", color: "var(--s3)", values: series.map(p => p.p95_us / 1000) }] })
+      : `<div class="empty">${s ? "One 5-minute bucket so far." : "No calls in the last hour. Run a case to generate some."}</div>`;
+    return `<div class="card pad"><div class="integ-head"><div><h3>${name}</h3><div class="muted small">${role}</div></div>${s ? (s.errors ? `<span class="chip c-amber">${s.errors} error${s.errors === 1 ? "" : "s"} · drills count</span>` : `<span class="chip c-green">No errors</span>`) : `<span class="chip c-grey">Idle</span>`}</div>
+      <div class="metrics4">${[["p50", s ? ms(s.p50_us) : "—"], ["p95", s ? ms(s.p95_us) : "—"], ["errors", s ? `${(s.errors / s.calls * 100).toFixed(1)}%` : "—"], ["calls 1h", s ? s.calls : 0]].map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join("")}</div>
+      ${chart}<ul class="uses">${uses.map(u => `<li>${esc(u)}</li>`).join("")}</ul><p class="faint small" style="margin:8px 0 0">${note}</p></div>`;
+  };
+  const rows = [["fern-api", `instance ${esc(st.instance)}`, true, req.requests ? `p95 ${ms(req.p95_us)} · ${req.requests} writes` : "no writes"],
+    ["PostgreSQL 16", `${svcStat("postgres") ? `${svcStat("postgres").calls} statements · p95 ${ms(svcStat("postgres").p95_us)}` : "no traced statements"}`, st.checks.postgres.up, `ping ${st.checks.postgres.ping_ms} ms`],
+    ["Redis 7", svcStat("redis") ? `${svcStat("redis").calls} commands · p95 ${ms(svcStat("redis").p95_us)}` : "no traced commands", st.checks.redis.up, st.checks.redis.up ? `ping ${st.checks.redis.ping_ms} ms` : (st.checks.redis.note || "unreachable: limiter fails open")],
+    ["Demo space pool", "pre-funded spaces at the bank", st.pool.ready > 0, `${st.pool.ready} ready · ${st.pool.claimed} in use`]];
+  return `<div class="grid g6">${[["Bank", bank === "column" ? "Column" : "Simulator", bank === "column" ? "ACH · sandbox" : "Column's API shape"], ["Third-party APIs", "3", "Column · Plaid · OpenAI"],
+      ["Writes, last hour", req.requests, `${req.spaces} space${req.spaces === 1 ? "" : "s"}`], ["API p95", ms(req.p95_us), "state-changing requests, 1h"],
+      ["Errors", req.requests ? `${(req.errors / req.requests * 100).toFixed(1)}%` : "—", "traces with an error span, drills included"], ["Postgres ping", `${st.checks.postgres.ping_ms} ms`, "checked just now"]]
+      .map(([l, v, s]) => `<div class="card stat"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("")}</div>
+    <div class="card pad"><div class="section-h"><h2 class="t">Architecture</h2><span class="faint small">${last ? `Outlined: what your last request touched · <a class="lnk" href="javascript:void 0" onclick="pickTrace('${last.id}')">${last.meta.tag} ${esc(last.meta.label)}</a>` : "Run a case in the demo to outline the path it takes."}</span></div>
+      <div class="arch-scroll">${archSvg()}</div>
+      <p class="faint small" style="margin:8px 0 0">Live: health is checked when this page loads; latency and call counts are aggregated from the last hour of stored traces, the same spans the demo shows. One FastAPI image serves the API and runs migrations and the account pool as Jobs. The money path has no queue: two short Postgres transactions with the bank call between them.</p></div>
+    <div class="section-h" style="margin-top:8px"><h2 class="t">Third-party services</h2><span class="faint small">from traces, last hour, all spaces</span></div>
+    <div class="grid g3">${svc.map(card).join("")}</div>
+    <div class="card pad"><h2 class="t">Components</h2><table><tr><th>Component</th><th>Detail</th><th>Status</th><th>Now</th></tr>
+      ${rows.map(([n, d, ok, now]) => `<tr><td>${n}</td><td class="muted">${d}</td><td>${ok ? `<span class="chip c-green">Up</span>` : ok === null ? `<span class="chip c-grey">n/a</span>` : `<span class="chip c-red">Down</span>`}</td><td class="mono">${now}</td></tr>`).join("")}</table></div>`;
+}
+function engBench() {
+  const r = rng(3), N = 32, lab = Array.from({ length: N }, (_, i) => `${Math.floor(i / 2)}:${i % 2 ? "30" : "00"}`);
+  const target = i => i < 10 ? i * 40 : i < 26 ? 400 : i < 28 ? 800 : Math.max(0, 400 - (i - 28) * 130);
+  const rps = lab.map((_, i) => target(i) * (0.97 + r() * 0.04));
+  const vus = lab.map((_, i) => Math.round(target(i) * 1.25 * (0.96 + r() * 0.06)));
+  const p50 = lab.map((_, i) => { const t = target(i); return t >= 800 ? 61 + r() * 12 : 11 + t / 400 * 10 + r() * 3; });
+  const p95 = lab.map((_, i) => { const t = target(i); return t >= 800 ? 180 + r() * 40 : 24 + t / 400 * 32 + r() * 6; });
+  const p99 = lab.map((_, i) => { const t = target(i); return t >= 800 ? 390 + r() * 60 : 52 + t / 400 * 60 + r() * 12; });
+  const eps = [["GET /me", "read", "55%", 9, 21, 38], ["POST /p2p", "write", "25%", 14, 38, 71], ["POST /withdrawals", "write + bank", "10%", 22, 57, 112], ["POST /webhooks/sim", "bank event", "10%", 6, 15, 29]];
+  const asserts = [["Duplicate payouts", "0", "no transfer was sent to the bank twice"], ["Overdrafts", "0", "nobody spent more than their available balance"], ["Unbalanced journals", "0", "every journal's debits equal its credits"], ["Balances vs the reference model", "0 diffs", "checked account by account after the run"]];
+  return `${SAMPLE("Sample numbers. The layout and method are final; the figures are placeholders until the load test runs against the live environment.")}
+    <div class="grid g4">${[["Peak throughput", "806 req/s", "1-minute spike, no 5xx"], ["Sustained", "400 req/s", "8 minutes at p95 58 ms"], ["Concurrent users", "1,000", "virtual users at peak"], ["Money errors", "0", "duplicates · overdrafts · unbalanced"]]
+      .map(([l, v, s], i) => `<div class="card stat ${i === 3 ? "good" : ""}"><div class="lbl">${l}</div><div class="val">${v}</div><div class="sub">${s}</div></div>`).join("")}</div>
+    <div class="grid g3">
+      <div class="card pad">${lineChart("bt-rps", { title: "Throughput (req/s)", labels: lab, unit: "elapsed", height: 220, width: 360, fmtv: v => v.toFixed(0), series: [{ name: "req/s", color: "var(--s1)", values: rps }] })}</div>
+      <div class="card pad">${lineChart("bt-vus", { title: "Concurrent virtual users", labels: lab, unit: "elapsed", height: 220, width: 360, fmtv: v => v.toFixed(0), series: [{ name: "VUs", color: "var(--s2)", values: vus }] })}</div>
+      <div class="card pad">${lineChart("bt-lat", { title: "Latency (ms)", labels: lab, unit: "elapsed", height: 220, width: 360, fmtv: v => v.toFixed(0), series: [{ name: "p50", color: "var(--s1)", values: p50 }, { name: "p95", color: "var(--s2)", values: p95 }, { name: "p99", color: "var(--s3)", values: p99 }] })}</div></div>
+    <div class="grid g2">
+      <div class="card pad"><h2 class="t">By endpoint</h2><table><tr><th>Endpoint</th><th>Share</th><th class="num">p50</th><th class="num">p95</th><th class="num">p99</th></tr>
+        ${eps.map(([e, t, s, a, b, c]) => `<tr><td class="mono small">${e}<div class="faint" style="font-family:var(--ui)">${t}</div></td><td>${s}</td><td class="num">${a}</td><td class="num">${b}</td><td class="num">${c}</td></tr>`).join("")}</table></div>
+      <div class="card pad"><h2 class="t">Money after the run</h2><p class="muted small" style="margin:0 0 6px">A reference model replays every accepted request; the database must agree with it exactly.</p>
+        ${asserts.map(([n, v, d]) => `<div class="check"><span class="ok">✓</span><div style="flex:1"><div>${n}</div><div class="faint small">${d}</div></div><b class="mono">${v}</b></div>`).join("")}</div></div>`;
+}
+// API reference. "Try it" runs against this demo space and links to the trace it produced.
+const lastOf = (kind, pred = () => true) => S.transfers.find(t => t.kind === kind && pred(t));
+const ENDPOINTS = [
+  { g: "Customer", m: "GET", p: "/me", d: "Balances for the customers in this space: balance, held, on hold, available.", fields: [] },
+  { g: "Customer", m: "GET", p: "/transfers", d: "This space's transfers, newest first, with their event names.", fields: [] },
+  { g: "Customer", m: "GET", p: "/transfers/{id}", d: "One transfer with its timeline and the journals it posted.", fields: [], path: () => { const t = S.transfers[0]; return t ? `/transfers/${t.id}` : null; } },
+  { g: "Customer", m: "POST", p: "/pulls", d: "S2 · Pull money from the linked account. Checks the balance with Plaid, then creates an ACH debit at the bank. The money is restricted until it settles and the hold ends.", idem: true, limited: true, fields: [["amount_minor", "integer", "Cents, > 0"], ["counterparty_name", "string?", "Sandbox: RETURN_UNAUTH makes Column return it (R29)"]], body: () => ({ amount_minor: 50000 }) },
+  { g: "Customer", m: "POST", p: "/p2p", d: "S3 · Send money to another customer in the space. Ledger only, one transaction.", idem: true, limited: true, fields: [["to_customer_id", "uuid", "Recipient in the same space"], ["amount_minor", "integer", "Cents, > 0"]], body: () => ({ to_customer_id: alex() ? alex().id : "", amount_minor: 5000 }) },
+  { g: "Customer", m: "POST", p: "/withdrawals", d: "S4 · Withdraw to the linked account. A lost bank reply leaves the transfer “unknown” with the money held, never “failed”.", idem: true, limited: true, fields: [["amount_minor", "integer", "Cents, > 0"], ["drill", "string?", "Sandbox only: drop_response | unavailable"]], body: () => ({ amount_minor: 10000, drill: "drop_response" }) },
+  { g: "Customer", m: "POST", p: "/transfers/recover-unknown", d: "S4 · Retry every “unknown” transfer with its original Idempotency-Key and book what the bank says.", fields: [] },
+  { g: "Demo", m: "POST", p: "/spaces", d: "Claim a pre-funded demo space (two customers, ledger accounts, one bank account) and get its session token.", fields: [], noAuth: true },
+  { g: "Demo", m: "POST", p: "/demo/payroll", d: "S1 · Book the payroll credit that landed on this space's bank account.", fields: [["amount_minor", "integer?", "Simulator only; pooled spaces use the real credit"]], body: () => ({}) },
+  { g: "Demo", m: "POST", p: "/demo/settle", d: "Demo clock: ask the bank to settle every transfer in flight, then apply what it returns.", fields: [] },
+  { g: "Demo", m: "POST", p: "/demo/release-funds", d: "Demo clock: end the hold period for settled pulls.", fields: [] },
+  { g: "Ops", m: "GET", p: "/ops/summary", d: "The Operations page: ledger check, bank vs books, the work queue, write-offs, reconciliation.", fields: [] },
+  { g: "Ops", m: "POST", p: "/write-offs", d: "S5 · Request a write-off of the customer's negative balance. Needs a second person to approve.", limited: true, fields: [] },
+  { g: "Ops", m: "POST", p: "/write-offs/{id}/approve", d: "S5 · Approve as a different person. The database rejects self-approval (CHECK constraint).", fields: [], path: () => { const w = S.ops && S.ops.write_offs.find(w => w.status === "pending"); return w ? `/write-offs/${w.id}/approve` : null; } },
+  { g: "Ops", m: "POST", p: "/ops/reconciliation/run", d: "Match every transaction on the bank account to exactly one cash journal; record exceptions.", fields: [] },
+  { g: "Ops", m: "POST", p: "/ops/reports", d: "Daily report: read-only facts, drafted by an OpenAI model within a daily budget, or by rules without a key.", fields: [] },
+  { g: "Ops", m: "GET", p: "/ledger/trial-balance", d: "Every ledger account and the two invariants.", fields: [] },
+  { g: "Platform", m: "GET", p: "/traces/{id}", d: "One trace from this space: spans with service, timing, status and attributes.", fields: [], path: () => S.trace ? `/traces/${S.trace}` : null },
+  { g: "Platform", m: "GET", p: "/status", d: "Dependency health now and per-service latency over the last hour. No session needed.", fields: [], noAuth: true },
+];
+function engApi() {
+  const key = e => `${e.m} ${e.p}`;
+  const ep = ENDPOINTS.find(e => key(e) === S.api) || ENDPOINTS[0];
+  const url = `${location.origin}${BASE.replace(/\/$/, "")}`;
+  const body = ep.body && ep.body();
+  const curl = `curl -X ${ep.m} ${url}${ep.p}${ep.noAuth ? "" : ` \\\n  -H "Authorization: Bearer $TOKEN"`}${ep.idem ? ` \\\n  -H "Idempotency-Key: $(uuidgen)"` : ""}${body && Object.keys(body).length ? ` \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(body)}'` : ""}`;
+  const groups = [...new Set(ENDPOINTS.map(e => e.g))];
+  const errors = [["401", "Missing or invalid session token", "no"], ["404", "Not found in this space", "no"], ["409", "Conflict (e.g. the bank can't do this in the sandbox)", "no"], ["422", "Validation or business rule (InsufficientFunds, AccountFrozen, key reused with a different body)", "no"], ["429", "Rate limited (Redis token bucket per space)", "yes, after Retry-After"], ["5xx", "Server error", "yes, with the same Idempotency-Key"]];
+  return `<div class="card pad"><div class="doc">
+      <div class="doc-nav">${groups.map(g => `<div class="grp">${g}</div>${ENDPOINTS.filter(e => e.g === g).map(e => `<button class="${e === ep ? "on" : ""}" onclick="S.api='${key(e)}';S.apiResult=null;S.apiTrace=null;render()"><span class="method ${e.m}">${e.m}</span><span class="mono">${e.p}</span></button>`).join("")}`).join("")}
+        <p class="faint small" style="margin:14px 10px 0">OpenAPI at <a class="lnk mono" href="${BASE}docs" target="_blank" rel="noopener">docs</a>, generated from the FastAPI models.</p></div>
+      <div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="method ${ep.m}" style="width:auto;font-size:13px">${ep.m}</span><span class="mono" style="font-size:15px">${ep.p}</span></div>
+        <p style="margin:8px 0 0">${ep.d}</p>
+        <div class="badges"><span class="chip flat c-grey">Auth: ${ep.noAuth ? "none" : "Bearer token (bound to one space)"}</span>${ep.idem ? `<span class="chip flat c-blue">Idempotency-Key required</span>` : ""}${ep.limited ? `<span class="chip flat c-grey">rate limited per space</span>` : ""}<span class="chip flat c-grey">Money in integer cents</span></div>
+        ${ep.fields.length ? `<h3 class="k">Body</h3><table><tr><th>Field</th><th>Type</th><th>Notes</th></tr>${ep.fields.map(([f, t, n]) => `<tr><td class="mono">${f}</td><td class="mono faint">${t}</td><td class="muted">${n}</td></tr>`).join("")}</table>` : ""}
+        <h3 class="k">Request</h3><pre class="code">${hl(curl)}</pre>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn sm primary" onclick="act('tryApi')" ${S.busy ? "disabled" : ""}>Try it</button><span class="faint small">Runs against your demo space</span>${S.apiTrace ? `<a class="btn sm ghost" href="javascript:void 0" onclick="pickTrace('${S.apiTrace}')">View its trace →</a>` : ""}</div>
+        ${S.apiResult ? `<h3 class="k">Response · ${S.apiResult.status}</h3><pre class="code">${esc(JSON.stringify(S.apiResult.data, null, 2))}</pre>` : ""}</div></div></div>
+    <div class="card pad"><h2 class="t">Errors</h2><table><tr><th>Status</th><th>Meaning</th><th>Safe to retry</th></tr>${errors.map(([s, m, r]) => `<tr><td class="mono">${s}</td><td class="muted">${m}</td><td class="small">${r}</td></tr>`).join("")}</table>
+      <p class="faint small" style="margin:10px 0 0">Every money-moving POST stores its response under (space, principal, operation, key). A retry gets the same status and body back, including errors.</p></div>`;
+}
+
+// ================================================================== interactions
+async function act(kind, arg) {
+  if (S.busy) return;
+  const t = S.transfers, onHome = ["", "app"].includes(route()[0]);
+  if (/^s\d$/.test(kind) && !onHome && !["s3", "s4"].includes(kind)) location.hash = "#/";
+  if (kind === "s1") {
+    if (t.some(x => x.kind === "payroll")) return toast("Payroll is already in. Try the next step.");
+    await run({ tag: "S1", title: "Get paid" }, "POST", "demo/payroll", {});
+  } else if (kind === "s2") {
+    if (t.some(x => x.kind === "pull" && x.counterparty_name !== "RETURN_UNAUTH" && ["processing", "pending"].includes(x.status))) return toast("A pull is already on its way. Advance the clock.");
+    await run({ tag: "S2", title: "Add money" }, "POST", "pulls", { amount_minor: 50000 }, { idem: newKey() });
+  } else if (kind === "s3") return sheet("send");
+  else if (kind === "s4") return sheet("withdraw");
+  else if (kind === "s5") {
+    if (isSim()) {
+      const pull = t.find(x => x.kind === "pull" && x.status === "settled");
+      if (!pull) return toast("Run S2 and advance the clock until it settles first");
+      await run({ tag: "S5", title: "Chargeback (R10)", ref: pull.id }, "POST", `demo/transfers/${pull.id}/return`, { return_code: "R10" });
+    } else {
+      const r = await run({ tag: "S5", title: "Pull, disputed" }, "POST", "pulls", { amount_minor: 50000, counterparty_name: "RETURN_UNAUTH" }, { idem: newKey() });
+      if (r && r.status < 300) await run({ tag: "S5", title: "Settles → returned (R29)" }, "POST", "demo/settle");
+    }
+  } else if (kind === "advance") {
+    if (t.some(x => x.status === "processing")) await run({ tag: "Clock", title: "Settle at the bank" }, "POST", "demo/settle");
+    else if (t.some(x => x.kind === "pull" && x.status === "settled" && !x.events.includes("funds_available"))) await run({ tag: "Clock", title: "Release holds" }, "POST", "demo/release-funds");
+    else toast("Nothing is in flight.");
+  } else if (kind === "recover") await run({ tag: "S4", title: "Recovery" }, "POST", "transfers/recover-unknown");
+  else if (kind === "requestWriteOff") await run({ tag: "S5", title: "Request write-off" }, "POST", "write-offs");
+  else if (kind === "approveWriteOff") await run({ tag: "S5", title: "Approve write-off", ref: arg }, "POST", `write-offs/${arg}/approve`);
+  else if (kind === "injectMismatch") { const r = await run({ tag: "Ops", title: "Drill: unbooked debit" }, "POST", "ops/drills/unbooked-bank-debit", { amount_minor: 2500 }); if (r && r.status < 300) toast("$25.00 left the bank account without a journal. Run reconciliation."); }
+  else if (kind === "reconcile") await run({ tag: "Ops", title: "Reconciliation" }, "POST", "ops/reconciliation/run");
+  else if (kind === "escalate") await run({ tag: "Ops", title: "Escalate" }, "POST", `ops/reconciliation/exceptions/${arg}/escalate`, {});
+  else if (kind === "report") { const r = await run({ tag: "Ops", title: "Daily report" }, "POST", "ops/reports"); if (r && r.status < 300) S.report = r.data; }
+  else if (kind === "tryApi") {
+    const ep = ENDPOINTS.find(e => `${e.m} ${e.p}` === S.api);
+    const path = ep.path ? ep.path() : ep.p;
+    if (!path) return toast("Nothing to point this at yet. Run a case first.");
+    const body = ep.body ? ep.body() : ep.m === "POST" ? undefined : undefined;
+    let r;
+    if (ep.m === "GET") { r = await call("GET", path.slice(1)); }
+    else {
+      if (ep.p === "/spaces") { r = await call("POST", "spaces"); r.traceId = null; }
+      else r = await run({ tag: "API", title: `${ep.m} ${ep.p}` }, ep.m, path.slice(1), body, ep.idem ? { idem: newKey() } : {});
+    }
+    S.apiResult = { status: r.status, data: r.data }; S.apiTrace = r.traceId || null;
+  }
+  if (!onHome && S.traces[0] && S.trace === S.traces[0].id && !["tryApi"].includes(kind) && !/^s\d$/.test(kind) && kind !== "injectMismatch")
+    toast(`Trace recorded · <a href="javascript:void 0" onclick="pickTrace('${S.trace}')">view it</a>`);
+  render();
+}
+function sheet(kind) { S.sheet = { kind }; if (!["", "app"].includes(route()[0])) location.hash = "#/"; S.pane = "app"; render(); }
+async function openDetail(id) {
+  const r = await call("GET", `transfers/${id}`);
+  if (r.status !== 200) return toast(errText(r));
+  S.detail = r.data; S.sheet = { kind: "detail" };
+  if (S.refs[id]) { const tr = S.traces.find(x => x.id === S.refs[id]); if (tr) { S.trace = tr.id; S.span = tr.focus; } }
+  render();
+}
+async function submitSheet() {
+  const amount = Math.round(parseFloat(document.getElementById("amt").value || "0") * 100);
+  if (!(amount > 0)) return toast("Enter an amount");
+  const k = S.sheet.kind, drill = k === "withdraw" && document.getElementById("drill").checked;
+  S.sheet = null;
+  if (k === "send") await run({ tag: "S3", title: "Pay Alex" }, "POST", "p2p", { to_customer_id: alex().id, amount_minor: amount }, { idem: newKey() });
+  else await run({ tag: "S4", title: drill ? "Withdraw · drill" : "Withdraw" }, "POST", "withdrawals", { amount_minor: amount, ...(drill ? { drill: "drop_response" } : {}) }, { idem: newKey() });
+  render();
+}
+
+// ================================================================== background: drifting fern veins
+(function veins() {
+  const c = document.getElementById("veins"), g = c.getContext("2d");
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fronds = Array.from({ length: 7 }, (_, i) => ({ x: (i + 0.5) / 7, y: 0.15 + (i % 3) * 0.32, a: -0.9 + (i % 4) * 0.55, len: 0.38 + (i % 3) * 0.12, ph: i * 1.7 }));
+  function size() { c.width = innerWidth * devicePixelRatio; c.height = innerHeight * devicePixelRatio; }
+  function draw(time) {
+    const W = c.width, H = c.height, s = Math.min(W, H);
+    g.clearRect(0, 0, W, H); g.lineWidth = devicePixelRatio; g.strokeStyle = "rgba(82,224,138,0.06)";
+    for (const f of fronds) {
+      let x = f.x * W, y = f.y * H, ang = f.a + (still ? 0 : Math.sin(time / 6000 + f.ph) * 0.05);
+      const steps = 26, seg = (f.len * s) / steps;
+      for (let i = 0; i < steps; i++) {
+        const nx = x + Math.cos(ang) * seg, ny = y + Math.sin(ang) * seg;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke();
+        const leaf = seg * 2.4 * (1 - i / steps);
+        for (const side of [-1, 1]) { const la = ang + side * 1.05;
+          g.beginPath(); g.moveTo(nx, ny); g.quadraticCurveTo(nx + Math.cos(la) * leaf * .6, ny + Math.sin(la) * leaf * .6, nx + Math.cos(la - side * .35) * leaf, ny + Math.sin(la - side * .35) * leaf); g.stroke(); }
+        x = nx; y = ny; ang += 0.045;
+      }
+    }
+    if (!still) requestAnimationFrame(draw);
+  }
+  addEventListener("resize", size); size(); requestAnimationFrame(draw);
+})();
+
+render();
+boot().then(async () => { const [top] = route(); if (top === "eng" || top === "") { await refreshStatus(); render(); } });
+</script>
+</body>
+</html>

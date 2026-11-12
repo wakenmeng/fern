@@ -130,3 +130,39 @@ async def test_pull_is_refused_when_the_linked_account_cannot_cover_it(db, space
     view = await payments.transfer_view(db, space.space_id, tid)
     assert "source_check_failed" in [e["event"] for e in view["timeline"]]
     assert (await payments.balances(db, space.space_id, space.customer_id))["available_minor"] == 0
+
+
+async def test_the_ui_reads_everything_it_needs_from_the_api(make_client):
+    c = await make_client()
+    page = await c.get("/")
+    assert page.status_code == 200 and "<title>Fern</title>" in page.text
+    assert (await c.get("/bench.json")).status_code in (200, 404)  # 404 until a load test has run
+
+    s = await new_space(c)
+    r = await c.post("/demo/payroll", json={"amount_minor": 1000_00}, headers=s["h"])
+    t = (await c.get(f"/traces/{r.headers['X-Trace-Id']}", headers=s["h"])).json()
+    # The trace says which journals it posted, so the panel can show them without another query.
+    posted = [sp["attrs"] for sp in t["spans"] if sp["name"].startswith("ledger.post")]
+    assert [(a["ledger.effect"], a["ledger.debit"], a["ledger.credit"], a["ledger.amount_minor"]) for a in posted] == [
+        ("ach_in.credit", "bank", "customer_deposit", 1000_00)
+    ]
+    assert posted[0]["ledger.credit_customer_id"] == str(s["customer_id"])
+
+    activity = (await c.get("/transfers", headers=s["h"])).json()["transfers"]
+    assert [(x["kind"], x["status"], x["events"]) for x in activity] == [("payroll", "completed", ["payroll_received"])]
+    assert (await c.get("/me", headers=s["h"])).json()["bank"] == "sim"
+
+    status = (await c.get("/status")).json()
+    assert status["checks"]["postgres"]["up"] and status["requests"]["requests"] >= 1
+    assert status["services"]["postgres"]["calls"] > 0 and status["config"]["bank"] == "sim"
+
+
+async def test_many_writes_in_flight_do_not_starve_the_pool(make_client):
+    # Saving a trace needs a connection while the request still holds one; 40 at once used to
+    # deadlock a 20-connection pool until PoolTimeout.
+    import asyncio
+
+    c = await make_client(rate_limit_per_minute=1000)
+    rs = await asyncio.wait_for(asyncio.gather(*(c.post("/spaces") for _ in range(40))), timeout=20)
+    assert [r.status_code for r in rs] == [201] * 40
+    assert all(r.headers["X-Trace-Id"] for r in rs)

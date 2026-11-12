@@ -19,7 +19,7 @@
 | Trace | `platform/tracing.py`：进程内记录，存在 Postgres，不用 OpenTelemetry 和 Tempo | `test_tracing.py` |
 | Plaid、限流 | 拉款前用 Plaid 查余额；Redis 按空间的令牌桶，Redis 不可用时放行 | `test_tracing.py`、Plaid sandbox |
 | 对账 | `recon.py`：逐笔核对现金流动，再比较 `available_amount` 和账本余额；演练「账外扣款 $25」 | `test_ops.py`；Column 实测 |
-| AI 报告 | `ai.py`：一次结构化输出调用，不是 agent；事实只读收集；Postgres 里按天封顶预算；没有 key 时用规则生成 | `test_ops.py`（用替身模拟 Claude） |
+| AI 报告 | `ai.py`：一次结构化输出调用，不是 agent；事实只读收集；Postgres 里按天封顶预算；没有 key 时用规则生成 | `test_ops.py`（用替身模拟 OpenAI） |
 | 部署 | `Dockerfile`、`infra/aws`（EKS、RDS、Redis、ECR）、`infra/k8s`、`infra/cloudflare`、`docs/DEPLOY.md` | 镜像本地冒烟、`tofu validate`、Worker 测试；**还没在真实 AWS 上跑过** |
 
 **和正文不同的决定：**
@@ -144,7 +144,7 @@ flowchart LR
   end
   INC[Column Sandbox]
   PLAID[Plaid Sandbox]
-  LLM[Claude API]
+  LLM[OpenAI API]
 
   CF -. live 时 .-> ALB
   CF -. 其他路径 / 关闭后 .-> GH
@@ -173,7 +173,7 @@ flowchart LR
 | 部署 | EKS（3 个按需节点，不用 spot，演示期间不缩容）、Helm、Argo CD、Terraform（AWS + Cloudflare） |
 | 前端 | React + TypeScript + Vite，打包进 nginx 镜像 |
 | 可观测性 | OpenTelemetry → Prometheus + Grafana（固定看板） |
-| AI | Claude API tool use |
+| AI | OpenAI Responses API（strict JSON schema） |
 | CI | GitHub Actions：gitleaks、单元测试、参考模型测试、崩溃注入、契约测试；ARM 镜像预构建 |
 
 ### 3.3 模块
@@ -632,7 +632,7 @@ Secrets Manager + External Secrets；EKS Pod Identity 最小权限；公开仓�
 | Redis、Kinesis、ALB、公网 IPv4、日志 | 最小规格 | ~$8 |
 | **单次运行 AWS 小计** | | **约 $25–35** |
 | 预演（每次几个小时，预计 3–4 次） | | 约 $15–30 |
-| Claude API | 整场硬上限 | ≤ $50 |
+| OpenAI API | 整场硬上限 | ≤ $50 |
 | Cloudflare | 免费；Worker 超额时升级 $5/月 | $0–5 |
 
 ---

@@ -1,13 +1,13 @@
 """AI operations report for a space (DESIGN §9).
 
-One Claude call, not an agent: we gather the facts with read-only queries (books, transfers,
+One LLM call (OpenAI Responses API), not an agent: we gather the facts with read-only queries (books, transfers,
 reconciliation, write-offs), hand them over as JSON, and ask for a structured report that cites
 transfer ids. The model never gets a tool that can write, so it cannot change the books.
 
 Spend is capped per day in Postgres: each report reserves its worst-case cost before calling
-Claude (under an advisory lock) and records the actual cost from `usage` afterwards. Without an
-API key, over budget, or if Claude declines, a rule-based report is produced instead and labelled
-as such.
+the model (under an advisory lock) and records the actual cost from `usage` afterwards. Without an
+API key, over budget, or if the model refuses or stops early, a rule-based report is produced
+instead and labelled as such.
 """
 
 import json
@@ -26,14 +26,21 @@ from fern.platform import tracing
 class AISettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="FERN_", env_file=".env", extra="ignore")
 
-    anthropic_api_key: str = ""
-    ai_model: str = "claude-opus-5-5"
+    openai_api_key: str = ""
+    ai_model: str = "gpt-5.5"
     ai_daily_budget_usd: float = 10.0
 
 
-MAX_TOKENS = 8000
-# USD per million tokens (input, output). Unknown models are priced as the default one.
-PRICES = {"claude-opus-5-5": (4.0, 20.0), "claude-opus-4-8": (5.0, 25.0), "claude-sonnet-5-5": (2.0, 10.0)}
+MAX_TOKENS = 8000  # includes reasoning tokens on reasoning models
+# USD per million tokens (input, output), matched by prefix of the model name the API reports
+# (e.g. "gpt-5-mini-2025-08-07"). Unknown models are priced as the most expensive listed, so the
+# budget errs on the safe side.
+PRICES = {
+    "gpt-5.5": (5.0, 30.0),
+    "gpt-5.4-mini": (0.75, 4.5),
+    "gpt-5-mini": (0.25, 2.0),
+    "gpt-5": (1.25, 10.0),
+}
 
 SYSTEM = """You write the operations report for one demo space of Fern, a neobank backend running \
 against bank sandboxes (no real money). Readers are the ops and engineering on-call.
@@ -241,7 +248,10 @@ def rules_report(facts: dict[str, Any], reason: str) -> Report:
 
 
 def _price(model: str) -> tuple[float, float]:
-    return PRICES.get(model, PRICES["claude-opus-5-5"])
+    for name in sorted(PRICES, key=len, reverse=True):
+        if model.startswith(name):
+            return PRICES[name]
+    return max(PRICES.values(), key=lambda p: p[1])
 
 
 def worst_case_micros(model: str, facts_json: str, system: str = SYSTEM) -> int:
@@ -257,14 +267,14 @@ async def _reserve(conn: AsyncConnection, space_id: UUID, model: str, micros: in
         await conn.execute("SELECT pg_advisory_xact_lock(hashtext('fern.ai_budget'))")
         cur = await conn.execute(
             "SELECT coalesce(sum(coalesce(cost_micros, reserved_micros)), 0)::bigint AS spent FROM ai_reports "
-            "WHERE source = 'claude' AND created_at >= date_trunc('day', now())"
+            "WHERE source <> 'rules' AND created_at >= date_trunc('day', now())"
         )
         spent = (await cur.fetchone())["spent"]
         if spent + micros > cap_micros:
             return None
         await conn.execute(
             "INSERT INTO ai_reports (id, space_id, status, source, model, reserved_micros) "
-            "VALUES (%s, %s, 'running', 'claude', %s, %s)",
+            "VALUES (%s, %s, 'running', 'openai', %s, %s)",
             (report_id, space_id, model, micros),
         )
     return report_id
@@ -273,7 +283,7 @@ async def _reserve(conn: AsyncConnection, space_id: UUID, model: str, micros: in
 async def spent_today(conn: AsyncConnection) -> int:
     cur = await conn.execute(
         "SELECT coalesce(sum(coalesce(cost_micros, reserved_micros)), 0)::bigint AS spent FROM ai_reports "
-        "WHERE source = 'claude' AND created_at >= date_trunc('day', now())"
+        "WHERE source <> 'rules' AND created_at >= date_trunc('day', now())"
     )
     return (await cur.fetchone())["spent"]
 
@@ -281,33 +291,35 @@ async def spent_today(conn: AsyncConnection) -> int:
 # ------------------------------------------------------------------ the report
 
 
-async def _ask_claude(client: Any, model: str, facts_json: str) -> tuple[Report, Any]:
-    with tracing.span("claude", "POST /v1/messages", **{"llm.model": model, "llm.max_tokens": MAX_TOKENS}) as s:
-        response = await client.beta.messages.create(
+async def _ask_model(client: Any, model: str, facts_json: str) -> tuple[Report, Any]:
+    """One Responses API call with a strict JSON schema, so the reply parses as a Report."""
+    extra = {"reasoning": {"effort": "low"}} if model.startswith(("gpt-5", "o")) else {}
+    with tracing.span("openai", "POST /v1/responses", **{"llm.model": model, "llm.max_output_tokens": MAX_TOKENS}) as s:
+        response = await client.responses.create(
             model=model,
-            max_tokens=MAX_TOKENS,
-            # If a safety classifier declines, the API re-runs the request on a fallback model.
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            output_config={"effort": "medium", "format": {"type": "json_schema", "schema": SCHEMA}},
-            system=SYSTEM,
-            messages=[{"role": "user", "content": f"Facts for today's report:\n\n{facts_json}"}],
+            instructions=SYSTEM,
+            input=f"Facts for today's report:\n\n{facts_json}",
+            text={"format": {"type": "json_schema", "name": "ops_report", "schema": SCHEMA, "strict": True}},
+            max_output_tokens=MAX_TOKENS,
+            **extra,
         )
         if s is not None:
             s.attrs.update(
                 {
                     "llm.served_by": response.model,
-                    "llm.stop_reason": response.stop_reason,
+                    "llm.status": response.status,
                     "tokens.in": response.usage.input_tokens,
                     "tokens.out": response.usage.output_tokens,
                 }
             )
-    if response.stop_reason == "refusal":
-        raise RuntimeError("Claude declined to write the report")
-    if response.stop_reason == "max_tokens":
-        raise RuntimeError("the report hit max_tokens")
-    text = next(b.text for b in response.content if b.type == "text")
-    return Report.model_validate_json(text), response
+    if response.status != "completed":
+        reason = getattr(response.incomplete_details, "reason", None) or response.status
+        raise RuntimeError(f"the response is {response.status} ({reason})")
+    for item in response.output:
+        for part in getattr(item, "content", None) or []:
+            if part.type == "refusal":
+                raise RuntimeError("the model refused to write the report")
+    return Report.model_validate_json(response.output_text), response
 
 
 async def generate(
@@ -327,11 +339,11 @@ async def generate(
         return await get(conn, space_id, rid)
 
     if client is None:
-        if not settings.anthropic_api_key:
-            return await save_rules("no Anthropic API key configured")
-        import anthropic
+        if not settings.openai_api_key:
+            return await save_rules("no OpenAI API key configured")
+        import openai
 
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        client = openai.AsyncOpenAI(api_key=settings.openai_api_key, timeout=60)
 
     model = settings.ai_model
     reserve = worst_case_micros(model, facts_json)
@@ -343,13 +355,13 @@ async def generate(
         return await save_rules("today's AI budget is used up")
 
     try:
-        report, response = await _ask_claude(client, model, facts_json)
+        report, response = await _ask_model(client, model, facts_json)
     except Exception as exc:  # noqa: BLE001 - any failure falls back to the rules report
         await conn.execute(
             "UPDATE ai_reports SET status = 'failed', cost_micros = 0, error = %s WHERE id = %s",
             (f"{type(exc).__name__}: {exc}"[:500], report_id),
         )
-        return await save_rules(f"Claude unavailable: {type(exc).__name__}")
+        return await save_rules(f"model unavailable: {type(exc).__name__}: {str(exc)[:120]}")
 
     pin, pout = _price(response.model)
     cost = int(response.usage.input_tokens * pin + response.usage.output_tokens * pout)

@@ -32,6 +32,12 @@ class RateLimiter:
     async def aclose(self) -> None:
         await self._redis.aclose()
 
+    async def ping(self) -> bool:
+        try:
+            return bool(await self._redis.ping())
+        except redis.RedisError:
+            return False
+
     async def allow(self, scope: str) -> bool:
         key = f"rl:{{{scope}}}"
         attrs = {"db.system": "redis", "db.statement": f"EVALSHA token_bucket 1 {key} {self.capacity} {self.rate:.3f}"}

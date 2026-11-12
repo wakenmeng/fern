@@ -21,7 +21,7 @@ Requires Docker and [uv](https://docs.astral.sh/uv/).
 make up        # Postgres and Redis in Docker
 make migrate   # apply migrations/*.sql
 make test      # scenario and failure tests
-make dev       # API on http://localhost:8000/docs
+make dev       # demo UI on http://localhost:8000/ · API docs on /docs
 make pool SIZE=5    # pre-fund demo spaces so visitors don't wait for payroll
 ```
 
