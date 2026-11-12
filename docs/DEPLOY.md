@@ -60,7 +60,15 @@ make k8s-pool        # 补回被 smoke 用掉的空间
 - 在集群里另起一份 API（`fern-bench`）：模拟银行、独立数据库 `fern_bench`（每次重建）、限流放宽。Column sandbox 和线上账户池都不受影响。
 - `bench/load.py` 作为 Job 在集群内运行，4 个进程发压，阶梯 25/50/100/150/200 个虚拟用户，每档 60 秒；结束后逐个空间核对：账平、可用余额与客户端预期一致、无负数、重放同一幂等键不会产生第二笔。
 - 结果写到 `bench/results/latest.json`；要上页面就复制到 `src/fern/web/bench.json` 并重新部署。
-- 2026-11-12 的结果：p95 ≤ 500 ms 时约 97 req/s（50 用户，p95 57 ms），吞吐上限约 165 req/s；瓶颈是 RDS db.t4g.micro 的 CPU（100 用户起 85–95%），不是 API。13,856 笔转账，0 资金错误。
+- 2026-11-12 小规格（线上同一台 db.t4g.micro）：p95 ≤ 500 ms 时约 97 req/s（50 用户，p95 57 ms），吞吐上限约 165 req/s；瓶颈是 RDS 的 CPU（100 用户起 85–95%），不是 API。13,856 笔转账，0 资金错误。结果：`bench/results/20261112T1038Z.json`。
+- **大规格**（约 $2.50/小时，跑完立刻删）：
+  ```bash
+  AWS_PROFILE=fern-deploy make bench-up      # 独立的 db.m7g.2xlarge Multi-AZ + 2 台 c7g.4xlarge（带 taint），约 20 分钟
+  AWS_PROFILE=fern-deploy make bench BENCH_SIZE=large   # 12 个 API 副本、8 个发压进程、100–800 用户
+  AWS_PROFILE=fern-deploy make bench-down
+  ```
+  `infra/aws-bench` 是独立的 Terraform 根目录，线上资源只按名字查找，创建和删除都不会碰线上。`BENCH_TAG=<git sha>` 可以压测还没上线的镜像。
+- 2026-11-12 大规格（镜像 ac397d2，trace 改为分组提交）：每一档都在 p95 ≤ 500 ms 内、0 错误。600 用户 1,143 req/s（p95 57 ms），800 用户 1,325 req/s（p95 271 ms），10 秒峰值 1,442 req/s。90,222 笔转账，800 个空间逐个核对，0 资金错误。RDS CPU 峰值约 57%，数据库不是瓶颈；800 用户时延迟上升更可能是 API 进程（12 个副本有 11 个落在同一台节点），没有直接测。和小规格相比数据库规格和 trace 批量写同时变了，提升没有拆开归因。结果：`bench/results/20261112T1842Z.json`。
 
 ## 运行中（H4–H68）
 
