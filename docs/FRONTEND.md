@@ -1,196 +1,110 @@
 # Fern 前端设计
 
-> 状态：v0.2 · 2026-11-11 · 配套原型：`design/prototype/index.html`（本地预览：`python3 -m http.server 8765 --directory design/prototype`）
-> v0.2：按「全套展示」要求补齐运营对账、AI 报告、API、银行接入监控、服务监控、压测报告，Ops 和 Engineering 拆成子页。
+> 状态：v0.3 · 2026-11-11 · 配套原型：`design/prototype/index.html`（本地预览：`python3 -m http.server 8765 --directory design/prototype`）
+> v0.3：按「一分钟讲完」重做信息架构。首页就是 Demo，每个操作都产生一条 Trace；Engineering 只留 Architecture、Benchmark、API 三页；Operations 合成一页。
 > 原则同后端：只服务 5 个场景（S1–S5）和常见故障，不做多余的东西。
 
 ---
 
-## 1. 核心理念：一屏两面
+## 1. 演示脚本（一分钟）
 
-普通的银行 App 只给用户看余额。Fern 要展示的是**后端**，所以每个操作都同时给出两面：
+1. **Demo**：一句话介绍 Fern，以及接入了哪些服务（Column、Plaid、Claude、AWS）。点 S1–S5，右边出现 Trace：经过哪些节点、每条 SQL、每次银行调用、记了哪几笔账。重点讲 S4：Column 超时后钱一直被 hold 住，恢复任务用同一个幂等键确认，不会重复打款。
+2. **Engineering → Architecture**：AWS 架构图，带每个节点的状态；上次请求经过的节点会被描边标出。下面是第三方服务监控：Column、Plaid、Claude 的延迟、错误率和调用量。
+3. **Engineering → Benchmark**：峰值吞吐、持续吞吐、并发用户数，以及「压测后零资金错误」，还有历次压测记录。
+4. **Engineering → API**：接口文档，可以直接 Try it，并跳到这次调用的 Trace。
 
-- **左边是用户看到的**：一个手机宽度的银行 App，内容是余额、按钮和状态。
-- **右边是银行账本里实际发生的**：时间线、复式分录、银行侧状态、不变量检查。
-
-访客点一次「提现」，左边显示「处理中」，右边同时出现 `hold_placed → bank_outcome_unknown → 同键重试 → ach_credit.accept / cash_out`，以及借贷两边的分录。**这个对照就是整个作品的展示方式**，不需要另外解释后端做了什么。
-
-窄屏（手机）上两面变成两个标签页：「App」和「Under the hood」。
+Operations 是备用页，被问到「内部怎么运营」时再打开。
 
 ---
 
 ## 2. 页面结构
 
-顶部导航 4 项：Home、Customer app、Operations、Engineering，外加常驻的「Sandbox · No real money」标记。Operations 和 Engineering 内部用左侧子导航（窄屏变成横向胶囊）。
+顶部导航 3 项：**Demo**（`/`）、**Operations**（`/ops`）、**Engineering**（`/eng/architecture | benchmark | api`），外加常驻的「Sandbox · No real money」标记。
 
-| 区域 | 子页 | 覆盖的要求 |
-|---|---|---|
-| **Home** `/` | 落地页：介绍、5 个场景卡片、三条导览路线（客户 / 团队 / 工程师） | — |
-| **Customer app** `/app` | 一屏两面：手机 App + Under the hood | 面向用户、全流程 |
-| **Operations** `/ops/*` | `overview` 客户 360 + 负余额核销 + AI 问答 | 面向内部 |
-| | `transfers` 转账列表（unknown 置顶） | 面向内部 |
-| | `recon` 对账：银行余额 vs 账本、逐笔匹配、差异队列、运行记录；可「注入差异」 | 运营对账 |
-| | `reports` AI 每日运营报告：展示工具调用过程，报告中的数字都带引用 | AI 协助生成报告 |
-| **Engineering** `/eng/*` | `design` 架构图、S4 故障时序图、关键决策 | 系统设计 |
-| | `api` 端点列表、curl 示例、「Try it」在当前空间里真实执行 | API |
-| | `ledger` 不变量、试算平衡、效果模板、全部分录 | 账本 |
-| | `bank` Column 连接状态、调用日志、webhook 投递记录（含重复和乱序）、unknown 数量、延迟曲线 | 银行接入状态监控 |
-| | `monitoring` 关键指标卡、API 延迟 p50/p95/p99、吞吐、5xx、任务队列、告警列表 | 服务监控 |
-| | `loadtest` 环境与负载曲线、吞吐和 p95 曲线、分端点延迟、**资金正确性断言**、瓶颈结论 | 压测报告 |
-| | `drills` 6 个故障演练、通过标准、CI 状态、跳转到能看到它的页面 | 全流程验证 |
-
----
-
-## 3. 主体验 `/app`
-
-### 3.1 场景导轨（Scenario rail）
-
-页面顶部横向排列 5 个步骤，每个是一个胶囊按钮，显示编号、标题和状态（未开始 / 进行中 / 完成）。点击即执行该场景，或打开对应的操作面板。按顺序走完约 5 分钟，也可以自由操作。
-
-| 步骤 | 按钮文案 | 点击后 |
-|---|---|---|
-| S1 | Get paid | 直接收到 $2,000 工资 |
-| S2 | Pull in $500 | 发起拉款 → 显示「处理中」→ 提示「推进演示时钟」 |
-| S3 | Pay Alex | 打开转账面板，预填 $50 |
-| S4 | Withdraw | 打开提现面板，带「模拟银行吞掉响应」开关（默认打开） |
-| S5 | Chargeback | 对 S2 那笔拉款触发未授权退回 |
-
-导轨右侧是**演示时钟**按钮：「Advance clock」。点击后推进结算、解除到期的资金限制，并注明「真实世界：1–2 个工作日」。
-
-### 3.2 左面：手机 App
-
-- **首页**：大号余额（衬线、等宽数字）；下面一行小字分别显示可用、处理中、受限金额，每项旁边有 ⓘ 解释；三个主按钮：Add money、Send、Withdraw；下面是最近活动列表。
-- **活动项**：图标 + 标题 + 状态胶囊 + 金额。状态颜色：处理中（蓝）、hold / 受限（琥珀）、结果未知（琥珀、慢速呼吸动画）、已到账（绿）、已退回（红）。
-- **转账详情**（底部抽屉）：竖向状态步骤条，每一步显示「演示时钟时间」和「真实世界中通常需要的时间」。unknown 状态下显示「我们在向银行确认，你的钱是安全的」，以及「Retry with same key」按钮。
-- **负余额状态**（S5）：首页余额变红，顶部出现横幅「Account frozen: balance is negative」，Send 和 Withdraw 置灰。
-
-### 3.3 右面：Under the hood
-
-4 个标签，默认跟随最近一次操作：
-
-1. **Timeline**：选中转账的事件流，每条带时间和来源（API / Bank / Clock / Ops）。
-2. **Ledger**：本次涉及的分录，以「借 / 贷」两栏的 T 字账形式展示，科目名用人能读懂的叫法（如 `Customer deposit · Jordan`），金额用等宽字体。新分录出现时有一次淡入高亮。
-3. **Bank**：银行侧看到的转账状态和银行交易（Column 的状态名，如 `initiated` / `settled` / `returned`）。
-4. **Checks**：两个不变量：「借方合计 = 贷方合计」「余额 = 分录汇总」，以及「每笔银行交易只入账一次」。全部显示绿色对勾和最近检查时间。
-
----
-
-## 4. 运营后台 `/ops`
-
-- **Customer 360**：客户卡片（余额、可用、held、on hold、标记 Negative / Frozen）。负余额时出现核销卡片：「Request write-off」→ 两个审批人头像（「You」和明确标注为模拟的「Simulated approver」）→ 「Approve」→ 余额归零。下方是 AI 问答，回答中每个结论都带引用胶囊，点击跳到对应分录。
-- **Transfers**：全部转账，unknown 置顶并有说明。
-- **Reconciliation**：4 张指标卡（银行余额、账本现金、差额、未关闭差异）；差异表（类型、状态、「Escalate」）；逐笔匹配视图（银行交易 ↔ 分录）；运行记录。「Inject a mismatch」会在银行侧放入一笔账本不知道的 −$25.00，下一次对账必须发现它。仍处于 unknown 的转账产生的未匹配交易会被标成「In flight」，确认后自动关闭。
-- **Reports**：「Generate report」→ 先列出 agent 调用的只读工具和结果，再给出报告：摘要、资金流表格、事故、退回与损失、对账、建议。报告里的数字来自工具结果，并带引用；对账有差额时摘要会如实写出。
-
----
-
-## 5. 工程展示 `/eng`（面向技术面试）
-
-原则：每个说法都能落到代码、测试或沙箱实测上；每页底部有「上一页 / 下一页」，可以按顺序读完。19 个子页分 5 组：
-
-| 组 | 页面 | 内容 |
-|---|---|---|
-| Start | Start here | 关键数字、五个难题及解法、10 分钟阅读路线 |
-| Design | Architecture | 架构、一次提现的请求路径（两个短事务夹着银行调用）、模块职责与源文件 |
-| | Data model | ER 图、「真正起作用的约束」表（每个唯一约束防止什么）、金额表示方式 |
-| | Money flows | S1–S5 切换：状态流、每一步的分录、时序图、对应的测试 |
-| | Consistency | 「至少一次输入 → 恰好一次效果」的核心思路、事务边界、锁规则、四层幂等、各类事实的权威来源 |
-| | Failure modes | 16 种故障：系统怎么做、靠什么发现、由哪个测试证明 |
-| | Decisions | 9 条 ADR：背景、决定、被否决的备选及原因、代价 |
-| | Scaling & limits | 现在的瓶颈、10× / 100× 的改法、演示版的已知限制 |
-| Build | API | 约定（认证、金额、幂等、异步结果）、端点 + Try it、错误码与可否重试 |
-| | Ledger | 实时不变量、同样检查的 SQL 版本、试算平衡、效果模板、全部分录 |
-| | Code walkthrough | 5 段真实代码摘录（记账守卫、按银行状态推导分录、银行调用的三种结局、Column 现金时点、安全重试）和讲解 |
-| | Testing | 测试分层、24 个测试逐条说明、Column 沙箱实测行为及代码对应处理 |
-| Run | Infrastructure | 拓扑、CI/CD、72 小时窗口、成本 |
-| | Bank integration | 指标卡、Column 状态映射、错误分类、延迟、调用日志、webhook 投递 |
-| | Monitoring & SLOs | 服务 SLO 和资金 SLO、指标卡、延迟/吞吐/5xx/在途图、告警规则 + runbook、应用导出的指标 |
-| | Incident review | 一次演练写成的事故复盘：时间线、分析、行动项 |
-| Prove | Load test report | 环境与负载、k6 方法、参考模型校验流程、结果、分端点延迟、资金正确性断言、瓶颈 |
-| | Failure drills | 6 个演练与通过标准 |
-| | Hard questions | 10 个评审时最可能被追问的问题和回答 |
-
-代码讲解和测试页引用的是仓库里的真实代码（`ledger.py`、`payments.py`、`column.py`），沙箱行为来自 `scripts/column_probe.py` 的实测。
-
-### 5.1 示例数据的处理
-
-原型里监控、银行延迟和压测报告用的是**示例数据**，页面顶部有紫色的「Sample data」标注。真实版本的数据来源：
-
-| 页面 | 数据来源 |
+| 页面 | 内容 |
 |---|---|
-| 服务监控 | Prometheus（应用暴露的 HTTP 直方图、任务队列、资金指标），后端提供只读的聚合接口 |
-| 银行接入 | 银行客户端的调用记录表、webhook inbox 表 |
-| 压测报告 | k6 输出的 JSON 汇总 + 压测后参考模型比对的结果，作为静态 JSON 随版本发布 |
+| **Demo** `/` | 简介和已接入的服务 → S1–S5 场景按钮和演示时钟 → 左边手机 App，右边 Trace 面板 |
+| **Operations** `/ops` | 4 个指标（账本平衡、银行与账本差额、待人工处理数、在途资金）→ 待处理队列 + 客户表 → 对账 → AI 日报 |
+| **Engineering** `/eng/architecture` | 6 个指标（接入银行数、第三方 API 数、AWS 组件数、Pod、API p95、可用性）→ AWS 架构图 → 第三方服务卡片（各带延迟曲线）→ AWS 组件状态表 |
+| `/eng/benchmark` | 4 个结论数字 → 吞吐 / 并发 / 延迟三张图 → 分端点延迟 → 压测后的资金正确性检查 → 历次压测记录与方法 |
+| `/eng/api` | 按 Customer / Bank / Ops / Demo 分组的接口文档：说明、认证与幂等标记、请求体字段、curl、Try it、响应、跳转到对应 Trace；错误码表 |
 
-上线前所有「Sample data」标注都必须被真实数据替换，否则不发布这个页面。
+---
 
-### 5.2 图表规范
+## 3. Trace 面板（Demo 页右侧）
 
-- 折线 2px、网格和坐标轴弱化、十字准线 + 悬停提示、单条曲线不显示图例；多条曲线同时有图例和线尾直接标注（标注会自动错开）
-- 每张图下方有「View as table」，可以展开为表格
-- 三色系列 `#2FA866` / `#3B82D9` / `#C2610F` 经 dataviz 校验器在暗色卡片（`#0D120F`）上全部通过：色盲区分度最差一对 ΔE 21.6，对比度 ≥ 3:1
-- 窄卡片里的图使用更窄的 viewBox，保证坐标文字缩放后仍可读
+每个用户操作、webhook、后台任务都会产生一条 trace，结构和线上服务导出的 OpenTelemetry span 一致。
+
+- **Trace 列表**：最近的 trace 排成一行胶囊，标签为 `S1`–`S5` 或 `Ops`，显示标题和耗时，点击即可切换。
+- **头部**：入口（如 `POST /v1/withdrawals`）、状态码、总耗时、span 数、服务数、trace id。
+- **服务节点图**：调用方 → Cloudflare → ALB → fern-api / fern-worker → Postgres、Redis → Column、Plaid、Claude，按 Cloudflare / AWS VPC / 第三方分组。本次经过的节点和连线会点亮，连线上标出调用次数（如「12 queries」）；出错的连线标红并写「timed out」。新 trace 出现时，有小圆点按 span 顺序沿连线流动（`prefers-reduced-motion` 时不播放）。
+- **瀑布图**：每行包含服务、操作和时间条。数据库事务默认折叠为一行（`db.tx request_withdrawal · 7 SQL`），可以展开看每条语句。出错的 span 标红。
+- **Span 详情**：SQL 原文（带高亮）、银行请求体和幂等键、全部属性（如 `column.status`、`lock.order`、`why`）。默认选中最值得看的 span：先选出错的，其次第三方调用，再次事务。
+- **记账结果**：本次 trace 产生的分录（效果、借方、贷方、金额）、操作后的余额和可用余额，以及不变量检查。没有记账时说明原因，例如「结果未知，只有 hold，等同键重试确认」。
+
+服务按三层着色：Fern on AWS、Data stores、External。三色是已校验的 `--s1` / `--s2` / `--s3`；每行都有服务名文字，颜色只做辅助。
+
+---
+
+## 4. 各场景的 trace
+
+| 场景 | 入口 | 经过的节点 | 要点 |
+|---|---|---|---|
+| S1 Get paid | Column webhook | CF → ALB → api → Postgres、Column | 验签 → 查 inbox 去重 → 回读 Column → 一个事务内记账，并写 inbox |
+| S2 Add money | `POST /v1/pulls` | CF → ALB → api → Redis、Postgres、Plaid、Column | 限流 → 事务 1（幂等键、建转账）→ Plaid 余额检查 → Column DEBIT → 事务 2（accept、restriction） |
+| S2 后续 | webhook `settled`；任务 `release_restrictions` | api → Column、Postgres；worker → Postgres | 到账才记现金；释放限制不记账 |
+| S3 Pay Alex | `POST /v1/p2p` | api → Redis、Postgres | 一个事务；按 id 顺序锁两个账户；没有银行参与 |
+| S4 Withdraw（演练） | `POST /v1/withdrawals` | api → Redis、Postgres、Column（超时） | 10 秒超时，结果标为 unknown，hold 保持 |
+| S4 恢复 | 任务 `recover_unknown` | worker → Postgres、Column | 同一个键重试，Column 返回原转账；比对金额和类型后再记账 |
+| S5 Chargeback | webhook `returned` | api → Column、Postgres | 只有退回能把余额记成负数；trace 中注明 R10 来自模拟器 |
+| S5 销账 | `POST /v1/ops/write-offs`、`.../approve` | api → Postgres | 由 CHECK 约束强制两人审批 |
+| 对账 | 任务 `reconcile` | worker → Column、Postgres | 只读，只产生差异记录 |
+| AI 日报 | `POST /v1/ops/reports` | api → Redis、Claude、Postgres | 先在 Redis 预占预算 → 规划 → 只读工具 → 起草 → 按实际用量结算 |
+
+---
+
+## 5. 示例数据
+
+架构页的节点状态、第三方延迟和压测数字在原型里是**示例数据**，页面顶部用紫色条标注「Prototype: …」。上线前必须换成真实数据，换不了就不展示这个数字。
+
+| 数据 | 线上来源 |
+|---|---|
+| Trace | 应用用 OpenTelemetry 导出到集群内的 Tempo；API 响应带 `traceparent`，前端通过 `GET /v1/traces/{trace_id}`（后端代理查询 Tempo）取 span |
+| 节点状态 | CloudWatch（ALB、RDS、ElastiCache）、Kubernetes API（Pod 状态）、Prometheus（应用指标） |
+| 第三方监控 | 应用自己的出站调用直方图 `fern_bank_call_duration_seconds` 等，按 provider 分组 |
+| 压测 | k6 输出的 JSON 汇总 + 参考模型比对结果，作为静态 JSON 随版本发布 |
 
 ---
 
 ## 6. 视觉语言
 
-**参考 green.com 的气质**：近黑底、单一的亮绿色、衬线小型大写标题、胶囊形控件、克制的留白、背景有很淡的动态纹理。**Fern 不复用它的任何身份元素**：名称、标志、字体、文案、纹理图案全部不同。
+**参考 green.com 的气质**：近黑底、单一的亮绿色、衬线小型大写标题、胶囊形控件、克制的留白、背景有很淡的动态纹理。**Fern 不复用它的任何身份元素**。
 
-### 6.1 色彩
-
-| Token | 值 | 用途 |
-|---|---|---|
-| `--bg` | `#060907` | 页面底色，比纯黑略带绿 |
-| `--surface` | `rgba(255,255,255,0.04)` | 卡片 |
-| `--surface-2` | `rgba(255,255,255,0.08)` | 输入框、悬停 |
-| `--line` | `rgba(255,255,255,0.09)` | 分隔线 |
-| `--text` | `#F1F7F2` | 正文 |
-| `--muted` | `rgba(241,247,242,0.6)` | 次要文字 |
-| `--fern` | `#52E08A` | 唯一的强调色：主按钮、借方高亮、通过的检查 |
-| `--fern-ink` | `#03140A` | 主按钮上的文字 |
-| `--amber` | `#F2B84B` | hold、受限、unknown |
-| `--blue` | `#7CC0FF` | 处理中 |
-| `--red` | `#FF6F61` | 退回、负余额 |
-
-只用暗色主题。这是品牌选择，和参考站一致。
-
-### 6.2 字体
-
-| 用途 | 字体 | 说明 |
-|---|---|---|
-| 展示标题、大号余额 | **Cormorant Garamond**，small-caps，字距 0.04em | 高对比衬线，与参考站的气质相近，但是不同的字体 |
-| UI 文本 | **Inter Tight** 400 / 500 / 600 | 紧凑的现代无衬线 |
-| 金额、ID、分录 | **JetBrains Mono**，tabular-nums | 等宽，便于对齐借贷金额 |
-
-### 6.3 形状与动效
-
-- 按钮、输入框、状态标签：胶囊形（`border-radius: 999px`）；卡片：圆角 20px
-- 主按钮：`--fern` 底、`--fern-ink` 字；次按钮：`--surface-2` 底
-- 背景纹理：一层很淡的**蕨类叶脉线**（从中心向两侧分叉的细线，透明度约 6%），缓慢漂移；`prefers-reduced-motion` 时静止
-- 新分录淡入加一次 `--fern` 描边闪烁；unknown 状态胶囊慢速呼吸
-- 标志：一个卷曲的**蕨菜嫩芽（fiddlehead）**螺旋 + 小型大写的 FERN 字标
+- 色彩：`--bg #060907`，`--fern #52E08A` 是唯一的强调色；`--amber` 表示 hold 或 unknown，`--red` 表示退回、负数和错误
+- 字体：标题用 Cormorant Garamond small-caps；界面文字用 Inter Tight；金额、ID、SQL 用 JetBrains Mono（关闭连字）
+- 工程图：分组框加区域标签（CLOUDFLARE / AWS · US-WEST-2 / VPC / AZ / EKS / THIRD-PARTY APIS），节点左侧色条表示层级，节点内显示一行状态指标，连线带协议或端口
+- 图表：2px 折线、十字准线加悬停提示、可展开为表格；多条曲线时有图例和线尾标注；三色系列通过 dataviz 校验器检查
 
 ---
 
 ## 7. 技术方案
 
-- React + TypeScript + Vite，单个 SPA，`base: '/apps/fern/'`，打包进 nginx 镜像（见 DESIGN §3.2）
-- 数据：直接调用 `/api`；会话 token 存在内存和 `sessionStorage` 里；所有资金操作带 `Idempotency-Key`（前端按「操作 + 点击」生成 UUID，重试时复用）
-- 刷新：每次操作后重新拉取 `/me`、`/transfers/{id}`、`/ledger/trial-balance`；有处理中的转账时每 2 秒轮询一次，不引入 WebSocket
-- 不引入组件库，只用少量自写组件：Pill、Card、Sheet（底部抽屉）、TAccount、Timeline、StatusChip
-- 关闭后的静态归档复用同一套组件，数据换成冻结的 JSON 快照（DESIGN §12.4）
+- React + TypeScript + Vite，单个 SPA，`base: '/apps/fern/'`，打包进 nginx 镜像
+- 所有资金操作带 `Idempotency-Key`，按「操作 + 点击」生成，重试时复用
+- 每次操作后重新拉取 `/v1/me` 和本次请求的 trace；有在途转账时每 2 秒轮询一次
+- 不引入组件库；服务节点图和瀑布图用 SVG 和 CSS 自己画
+- 72 小时后的静态归档复用同一套组件，数据换成冻结的 JSON 快照（含 trace）
 
 ---
 
-## 8. 后端需要补的接口（为前端服务的最小集合）
+## 8. 后端需要补的东西
 
-| 接口 | 用途 |
+| 项 | 用途 |
 |---|---|
-| `GET /transfers?status=&limit=` | 活动列表、运营后台转账表 |
-| `GET /ledger/journals?transfer_id=` | Ledger 标签、全部分录 |
-| `POST /recon/runs`、`GET /recon/runs`、`GET /recon/exceptions` | 对账页 |
-| `GET /bank/calls`、`GET /bank/webhooks` | 银行接入页 |
-| `GET /metrics/summary?window=` | 服务监控页（从 Prometheus 聚合） |
-| `POST /ai/investigate`、`POST /ai/reports` | AI 问答和报告 |
-| `POST /demo/inject-mismatch` | 对账演示 |
+| OpenTelemetry 埋点（FastAPI、asyncpg、httpx、redis）+ Tempo | Trace 面板 |
+| `GET /v1/traces/{trace_id}` | 按 trace id 取 span（只返回当前 space 自己的 trace） |
+| Redis 限流（token bucket）、AI 预算预占 | trace 里的 Redis 节点；DESIGN 已规划，代码里还没有 |
+| Plaid 余额检查（`/accounts/balance/get`） | S2 trace 里的 Plaid 节点；配置已有，调用还没写 |
+| `POST /v1/ops/reconciliation/run`、`recon_runs` / `recon_exceptions` 表 | 对账 |
+| `GET /v1/status`（聚合 CloudWatch、K8s、Prometheus） | 架构页的节点状态 |
+| `POST /v1/ops/reports` | AI 日报 |
