@@ -1,0 +1,1559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fern · Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter+Tight:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #060907;
+  --card: #0D120F;
+  --surface: rgba(255,255,255,0.04);
+  --surface-2: rgba(255,255,255,0.08);
+  --line: rgba(255,255,255,0.09);
+  --text: #F1F7F2;
+  --muted: rgba(241,247,242,0.62);
+  --faint: rgba(241,247,242,0.4);
+  --fern: #52E08A;
+  --fern-ink: #03140A;
+  --fern-soft: rgba(82,224,138,0.12);
+  --amber: #F2B84B;
+  --amber-soft: rgba(242,184,75,0.12);
+  --blue: #7CC0FF;
+  --blue-soft: rgba(124,192,255,0.12);
+  --red: #FF6F61;
+  --red-soft: rgba(255,111,97,0.12);
+  --violet: #C9A7FF;
+  /* chart series, validated on --card with the dataviz validator (dark mode) */
+  --s1: #2FA866; --s2: #3B82D9; --s3: #C2610F;
+  --display: "Cormorant Garamond", Georgia, serif;
+  --ui: "Inter Tight", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 var(--ui); -webkit-font-smoothing: antialiased; }
+body { min-height: 100vh; overflow-x: hidden; }
+a { color: inherit; }
+button { font: inherit; color: inherit; cursor: pointer; }
+#veins { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+.wrap { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 0 24px; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); } .faint { color: var(--faint); }
+.small { font-size: 12.5px; }
+
+header { position: sticky; top: 0; z-index: 20; backdrop-filter: blur(12px); background: rgba(6,9,7,0.75); border-bottom: 1px solid var(--line); }
+header .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand svg { width: 26px; height: 26px; }
+.brand span { font-family: var(--display); font-variant: small-caps; letter-spacing: 0.14em; font-size: 22px; font-weight: 600; }
+nav.top { display: flex; gap: 4px; }
+nav.top a { text-decoration: none; padding: 6px 14px; border-radius: 999px; color: var(--muted); font-weight: 500; font-size: 14px; }
+nav.top a.on, nav.top a:hover { color: var(--text); background: var(--surface-2); }
+nav.top .short { display: none; }
+@media (max-width: 600px) { nav.top .full { display: none; } nav.top .short { display: inline; } }
+.sandbox { margin-left: auto; font-size: 12px; font-weight: 600; letter-spacing: .04em; padding: 5px 12px; border-radius: 999px; border: 1px solid rgba(242,184,75,.35); color: var(--amber); background: var(--amber-soft); white-space: nowrap; }
+
+.btn { display: inline-block; text-decoration: none; border: 0; border-radius: 999px; padding: 10px 18px; font-weight: 600; font-size: 14px; background: var(--surface-2); transition: transform .12s, background .12s; white-space: nowrap; }
+.btn:hover { background: rgba(255,255,255,.12); }
+.btn:active { transform: scale(.98); }
+.btn.primary { background: var(--fern); color: var(--fern-ink); }
+.btn.primary:hover { background: #6BEA9C; }
+.btn.ghost { background: transparent; border: 1px solid var(--line); }
+.btn[disabled] { opacity: .35; pointer-events: none; }
+.btn.sm { padding: 6px 12px; font-size: 13px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.chip.flat::before { display: none; }
+.c-green { color: var(--fern); background: var(--fern-soft); }
+.c-blue { color: var(--blue); background: var(--blue-soft); }
+.c-amber { color: var(--amber); background: var(--amber-soft); }
+.c-red { color: var(--red); background: var(--red-soft); }
+.c-grey { color: var(--muted); background: var(--surface-2); }
+.c-violet { color: var(--violet); background: rgba(201,167,255,.13); }
+.breathe { animation: breathe 1.8s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: .45; } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 20px; }
+.pad { padding: 20px 22px; }
+h2.t { font-family: var(--display); font-variant: small-caps; font-weight: 600; letter-spacing: .03em; font-size: 25px; margin: 0 0 12px; line-height: 1.15; }
+h3.k { font-size: 11.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); margin: 18px 0 8px; }
+input[type=text], input[type=number] { width: 100%; background: var(--surface-2); border: 1px solid transparent; border-radius: 999px; padding: 11px 16px; color: var(--text); font: inherit; outline: none; }
+input:focus { border-color: rgba(82,224,138,.5); }
+.toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); z-index: 50; background: #111813; border: 1px solid var(--line); padding: 10px 18px; border-radius: 999px; font-size: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+.sample { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 14px; background: rgba(201,167,255,.08); border: 1px solid rgba(201,167,255,.22); color: var(--violet); font-size: 13px; margin-bottom: 16px; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+tr.click { cursor: pointer; } tr.click:hover td { background: var(--surface); }
+.callout { padding: 12px 14px; border-radius: 14px; font-size: 13px; margin-bottom: 14px; }
+.callout.amber { background: var(--amber-soft); color: var(--amber); }
+.callout.green { background: var(--fern-soft); color: var(--fern); }
+.callout.red { background: var(--red-soft); color: var(--red); }
+.empty { padding: 26px 8px; color: var(--faint); font-size: 13px; text-align: center; }
+.grid { display: grid; gap: 16px; }
+.g2 { grid-template-columns: 1fr 1fr; } .g3 { grid-template-columns: repeat(3, 1fr); } .g4 { grid-template-columns: repeat(4, 1fr); } .g6 { grid-template-columns: repeat(6, 1fr); }
+.stack > * + * { margin-top: 16px; }
+/* grid children may shrink below their content, so wide tables scroll inside their card */
+.with-side > *, .stack > *, .grid > *, .ep > *, .split > * { min-width: 0; }
+
+/* landing */
+.hero { text-align: center; padding: 110px 0 64px; }
+.hero h1 { font-family: var(--display); font-variant: small-caps; font-weight: 500; letter-spacing: .04em; font-size: clamp(44px, 7vw, 84px); line-height: 1.02; margin: 22px 0; }
+.hero h1 .accent { color: var(--fern); }
+.hero p { max-width: 640px; margin: 0 auto 32px; color: var(--muted); font-size: 17px; }
+.ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.live { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.live i { width: 8px; height: 8px; border-radius: 50%; background: var(--fern); box-shadow: 0 0 0 4px var(--fern-soft); }
+.cases { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; padding-bottom: 28px; }
+.case { padding: 20px; display: flex; flex-direction: column; gap: 10px; min-height: 196px; text-decoration: none; }
+.case .n { font-family: var(--mono); font-size: 12px; color: var(--fern); }
+.case h3 { font-family: var(--display); font-variant: small-caps; letter-spacing: .03em; font-weight: 600; font-size: 22px; margin: 0; line-height: 1.1; }
+.case p { margin: 0; color: var(--muted); font-size: 14px; flex: 1; }
+.case .survives { font-size: 12px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 10px; }
+.case .survives b { color: var(--text); font-weight: 500; }
+.tours { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding-bottom: 80px; }
+.tour { padding: 22px; text-decoration: none; display: block; }
+.tour .who { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--fern); }
+.tour h3 { font-family: var(--display); font-variant: small-caps; font-size: 26px; font-weight: 600; margin: 6px 0 8px; letter-spacing: .03em; }
+.tour ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+footer { border-top: 1px solid var(--line); padding: 28px 0 40px; font-size: 13px; color: var(--faint); text-align: center; }
+
+/* section layout with sidebar */
+.page-title { padding: 30px 0 18px; }
+.page-title h1 { font-family: var(--display); font-variant: small-caps; font-weight: 500; letter-spacing: .04em; font-size: 44px; margin: 0; line-height: 1.05; }
+.page-title p { margin: 6px 0 0; color: var(--muted); }
+.with-side { display: grid; grid-template-columns: 212px 1fr; gap: 26px; padding-bottom: 60px; align-items: start; }
+.side-nav { position: sticky; top: 84px; display: flex; flex-direction: column; gap: 2px; max-height: calc(100vh - 100px); overflow-y: auto; }
+.side-nav a { padding: 5px 12px !important; }
+.side-nav .grp { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); padding: 12px 12px 4px; }
+.side-nav a { text-decoration: none; font-size: 14px; color: var(--muted); padding: 7px 12px; border-radius: 999px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.side-nav a.on, .side-nav a:hover { background: var(--surface-2); color: var(--text); }
+.side-select { display: none; width: 100%; background: var(--surface-2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 10px 16px; font: 500 14px var(--ui); appearance: auto; }
+.side-select option, .side-select optgroup { background: #0D120F; color: var(--text); }
+.side-nav a .badge { font-family: var(--mono); font-size: 11px; padding: 0 7px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); }
+
+/* app view */
+.rail-wrap { padding: 22px 0 14px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.rail { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; }
+.step { display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 7px 14px 7px 8px; font-size: 13px; font-weight: 500; }
+.step .num { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-family: var(--mono); font-size: 11px; background: var(--surface-2); color: var(--muted); }
+.step.done .num { background: var(--fern); color: var(--fern-ink); }
+.step.next { border-color: rgba(82,224,138,.55); box-shadow: 0 0 0 3px var(--fern-soft); }
+.clock { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.clock .t { font-family: var(--mono); color: var(--muted); }
+.hint { font-size: 13px; color: var(--muted); margin: 0 0 18px; }
+.hint b { color: var(--fern); font-weight: 600; }
+.split { display: grid; grid-template-columns: 390px 1fr; gap: 24px; align-items: start; padding-bottom: 60px; }
+.mobile-tabs { display: none; }
+.phone { position: relative; border-radius: 40px; border: 1px solid rgba(255,255,255,.14); background: #0B110D; padding: 18px 18px 22px; min-height: 720px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.5), inset 0 0 0 6px #060907; }
+.statusbar { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; padding: 4px 12px 14px; color: var(--muted); }
+.banner { margin: 0 4px 14px; padding: 10px 14px; border-radius: 14px; background: var(--red-soft); color: var(--red); font-size: 13px; font-weight: 500; }
+.bal-label { font-size: 13px; color: var(--muted); padding: 0 6px; }
+.balance { font-family: var(--display); font-weight: 500; font-size: 54px; line-height: 1.05; padding: 2px 6px 6px; font-variant-numeric: lining-nums tabular-nums; }
+.balance.neg { color: var(--red); }
+.subbal { display: flex; gap: 14px; flex-wrap: wrap; padding: 0 6px 18px; font-size: 12.5px; color: var(--muted); }
+.subbal span { cursor: help; border-bottom: 1px dotted var(--faint); }
+.subbal b { color: var(--text); font-weight: 600; font-family: var(--mono); font-size: 12px; }
+.actions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding: 0 4px 20px; }
+.actions .btn { padding: 12px 0; }
+.act-title { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); padding: 0 6px 8px; }
+.item { display: flex; align-items: center; gap: 12px; padding: 11px 8px; border-radius: 14px; cursor: pointer; }
+.item:hover, .item.sel { background: var(--surface); }
+.icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); font-size: 15px; flex: none; }
+.item .mid { flex: 1; min-width: 0; }
+.item .ttl { font-weight: 500; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item .amt { font-family: var(--mono); font-size: 13px; text-align: right; }
+.amt.in { color: var(--fern); }
+.sheet-bg { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; z-index: 5; }
+.sheet { width: 100%; background: #101712; border-top: 1px solid var(--line); border-radius: 26px 26px 0 0; padding: 18px 20px 24px; max-height: 88%; overflow: auto; animation: up .2s ease-out; }
+@keyframes up { from { transform: translateY(30px); opacity: 0; } }
+.sheet h3 { font-family: var(--display); font-variant: small-caps; font-weight: 600; font-size: 26px; letter-spacing: .03em; margin: 4px 0 14px; }
+.grab { width: 40px; height: 4px; border-radius: 4px; background: var(--surface-2); margin: 0 auto 10px; }
+.field { margin-bottom: 12px; }
+.field label { display: block; font-size: 12px; color: var(--muted); margin: 0 0 6px 6px; }
+.toggle { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 16px; background: var(--amber-soft); border: 1px solid rgba(242,184,75,.25); margin: 6px 0 16px; cursor: pointer; font-size: 13px; }
+.toggle input { accent-color: var(--amber); margin-top: 3px; }
+.toggle b { color: var(--amber); }
+.steps { list-style: none; margin: 8px 0 16px; padding: 0; }
+.steps li { position: relative; padding: 0 0 16px 26px; font-size: 13.5px; }
+.steps li::before { content: ""; position: absolute; left: 4px; top: 6px; width: 10px; height: 10px; border-radius: 50%; background: var(--fern); }
+.steps li::after { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 2px; background: var(--line); }
+.steps li:last-child::after { display: none; }
+.steps li.amber::before { background: var(--amber); } .steps li.red::before { background: var(--red); } .steps li.blue::before { background: var(--blue); }
+.steps .when { font-size: 11.5px; color: var(--faint); }
+.steps .real { font-size: 11.5px; color: var(--muted); font-style: italic; }
+.hood { padding: 20px; min-height: 720px; }
+.hood-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.hood-head h2 { font-family: var(--display); font-variant: small-caps; font-weight: 600; font-size: 28px; letter-spacing: .03em; margin: 0; }
+.tabs { display: flex; gap: 4px; margin-bottom: 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.tabs button { background: none; border: 0; padding: 9px 14px; font-weight: 500; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button.on { color: var(--text); border-color: var(--fern); }
+.tl { list-style: none; margin: 0; padding: 0; }
+.tl li { display: grid; grid-template-columns: 64px 70px 1fr; gap: 10px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.tl .src { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; }
+.src.api { color: var(--blue); } .src.bank { color: var(--fern); } .src.clock { color: var(--amber); } .src.ops { color: var(--violet); }
+.tl .code { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.journal { border: 1px solid var(--line); border-radius: 16px; margin-bottom: 12px; overflow: hidden; }
+.journal.fresh { animation: flash 1.6s ease-out; }
+@keyframes flash { 0% { border-color: var(--fern); box-shadow: 0 0 0 3px var(--fern-soft); } }
+.journal .jh { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; background: var(--surface); font-size: 12.5px; flex-wrap: wrap; }
+.journal .jh .eff { font-family: var(--mono); color: var(--fern); }
+.taccount { display: grid; grid-template-columns: 1fr 1fr; }
+.taccount > div { padding: 10px 14px; }
+.taccount > div + div { border-left: 1px solid var(--line); }
+.taccount .side { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; color: var(--faint); margin-bottom: 4px; }
+.taccount .acct { font-size: 13.5px; }
+.taccount .val { font-family: var(--mono); font-size: 13px; }
+.check { display: flex; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.check .ok { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--fern); color: var(--fern-ink); font-size: 13px; font-weight: 700; flex: none; }
+.check .bad { background: var(--red); }
+
+/* ops / eng pieces */
+.who { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; background: var(--fern-soft); color: var(--fern); flex: none; }
+.avatar.bot { background: rgba(201,167,255,.14); color: var(--violet); }
+.kv { display: flex; justify-content: space-between; font-size: 13.5px; padding: 5px 0; }
+.kv b { font-family: var(--mono); font-weight: 500; }
+.approvals { display: flex; gap: 14px; flex-wrap: wrap; margin: 12px 0 14px; }
+.approver { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); font-size: 13px; }
+.cite { display: inline-flex; align-items: center; font-family: var(--mono); font-size: 11.5px; padding: 1px 8px; border-radius: 999px; background: var(--fern-soft); color: var(--fern); border: 0; cursor: pointer; vertical-align: 1px; }
+.ai-answer { font-size: 14.5px; line-height: 1.65; }
+.ai-note { font-size: 12px; color: var(--faint); margin-top: 12px; }
+.tool { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 6px 0; font-size: 13px; border-bottom: 1px dashed var(--line); }
+.tool .fn { font-family: var(--mono); color: var(--violet); overflow-wrap: anywhere; }
+.report h4 { font-family: var(--display); font-variant: small-caps; font-size: 21px; font-weight: 600; letter-spacing: .03em; margin: 20px 0 6px; }
+.report p { margin: 0 0 8px; color: var(--text); }
+.stat { padding: 16px 18px; }
+.stat .lbl { font-size: 12px; color: var(--muted); }
+.stat .val { font-family: var(--display); font-size: 34px; font-weight: 500; line-height: 1.1; margin-top: 2px; font-variant-numeric: lining-nums tabular-nums; }
+.stat .sub { font-size: 12px; color: var(--faint); }
+.stat.warn .val { color: var(--amber); } .stat.good .val { color: var(--fern); }
+.arch { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 6px 0 10px; }
+.node { border: 1px solid var(--line); border-radius: 16px; padding: 14px; background: var(--surface); font-size: 13px; position: relative; }
+.node b { display: block; font-size: 14px; margin-bottom: 4px; }
+.node.money { border-color: rgba(82,224,138,.5); }
+.arch.flow .node:not(:last-child)::after { content: "→"; position: absolute; right: -11px; top: 50%; transform: translateY(-50%); color: var(--fern); }
+.legend-line { font-size: 12.5px; color: var(--muted); }
+.ep { display: grid; grid-template-columns: 330px 1fr; gap: 16px; }
+.ep-list button { width: 100%; text-align: left; display: flex; gap: 10px; align-items: center; background: none; border: 0; padding: 8px 10px; border-radius: 12px; font-size: 13px; }
+.ep-list button:hover, .ep-list button.on { background: var(--surface-2); }
+.method { font-family: var(--mono); font-size: 11px; font-weight: 600; width: 44px; flex: none; }
+.method.GET { color: var(--blue); } .method.POST { color: var(--fern); }
+pre.code { font-variant-ligatures: none; background: #070B08; border: 1px solid var(--line); border-radius: 14px; padding: 14px; font: 12.5px/1.55 var(--mono); color: #CFE9D7; overflow: auto; margin: 6px 0 14px; max-height: 360px; white-space: pre; }
+.match { display: grid; grid-template-columns: 1fr 120px 1fr; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.match .mid { text-align: center; }
+.seq { width: 100%; height: auto; }
+
+/* engineering pages */
+.pager { display: flex; justify-content: space-between; gap: 12px; }
+a.lnk { color: var(--fern); text-decoration: none; border-bottom: 1px solid rgba(82,224,138,.35); }
+.srcref { display: inline-block; font-size: 11.5px; color: var(--muted); background: var(--surface-2); padding: 1px 8px; border-radius: 6px; }
+.codefile { font-size: 11.5px; color: var(--faint); margin: 2px 0 -2px; }
+.hc { color: rgba(241,247,242,.42); } .hs { color: #A8E6BD; } .hk { color: #C9A7FF; }
+.states { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.states .arrow { color: var(--faint); font-size: 13px; white-space: pre; }
+.anno { border-left: 2px solid var(--fern); padding: 4px 12px; font-size: 13.5px; color: var(--muted); }
+details.adr { border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-bottom: 10px; background: var(--surface); }
+details.adr summary { cursor: pointer; font-weight: 600; list-style-position: outside; }
+details.adr .adr-body { margin-top: 10px; font-size: 14px; }
+details.adr .adr-body p { margin: 0 0 8px; }
+.tour-list { margin: 0; padding-left: 20px; } .tour-list li { margin: 6px 0; }
+
+/* charts */
+.chart { position: relative; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart .tip { position: absolute; pointer-events: none; background: #141B16; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; font-size: 12px; display: none; white-space: nowrap; z-index: 3; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.chart .tip .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.chart .tip i, .legend i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 0 0 6px; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+details.tbl summary { cursor: pointer; font-size: 12px; color: var(--faint); margin-top: 6px; }
+details.tbl table { margin-top: 8px; font-size: 12px; }
+.chart-title { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 6px; }
+.chart-title b { font-size: 14px; font-weight: 600; }
+
+@media (max-width: 1080px) {
+  .cases { grid-template-columns: 1fr 1fr; } .tours { grid-template-columns: 1fr; }
+  .split { grid-template-columns: 1fr; }
+  .mobile-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .split[data-pane=app] .hood, .split[data-pane=hood] .phone { display: none; }
+  .with-side { grid-template-columns: 1fr; }
+  .side-nav { display: none; }
+  .side-select { display: block; }
+  .g3, .g4 { grid-template-columns: 1fr 1fr; } .g6 { grid-template-columns: repeat(3, 1fr); }
+  .ep { grid-template-columns: 1fr; }
+  .arch { grid-template-columns: 1fr 1fr; } .arch.flow .node::after { display: none; }
+}
+@media (max-width: 600px) {
+  .wrap { padding: 0 16px; }
+  header .wrap { gap: 12px; } nav.top a { padding: 6px 9px; } .sandbox { display: none; }
+  .cases, .g2, .g3, .g4 { grid-template-columns: 1fr; } .g6 { grid-template-columns: 1fr 1fr; }
+  .phone { border-radius: 28px; min-height: 640px; }
+  .tl li { grid-template-columns: 54px 1fr; } .tl li .src { display: none; }
+  .match { grid-template-columns: 1fr; } .match .mid { text-align: left; }
+  table { display: block; overflow-x: auto; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<canvas id="veins" aria-hidden="true"></canvas>
+<header>
+  <div class="wrap">
+    <a class="brand" href="#/" aria-label="Fern home">
+      <svg viewBox="0 0 32 32" fill="none" stroke="#52E08A" stroke-width="2.2" stroke-linecap="round">
+        <path d="M16 30 C16 22 9 21 9 14 A7 7 0 1 1 16 21 A3.6 3.6 0 1 1 13.2 16.6"/>
+        <path d="M16 26 C19 25 21 23 22 20" opacity=".55"/>
+      </svg>
+      <span>Fern</span>
+    </a>
+    <nav class="top" id="nav"></nav>
+    <div class="sandbox">Sandbox · No real money</div>
+  </div>
+</header>
+<main id="view"></main>
+<div id="toast"></div>
+
+<script>
+// ================================================================== mock ledger engine
+// Mirrors the backend rules (src/fern/ledger.py, payments.py), so the prototype behaves like the real thing.
+const ACC = {
+  bank:       { name: "Cash at bank", sub: "Column sandbox account", side: "D" },
+  receivable: { name: "ACH debits in flight", sub: "pulled, not yet arrived", side: "D" },
+  pending:    { name: "ACH credits in flight", sub: "sent, not yet left", side: "C" },
+  losses:     { name: "Return losses", sub: "written off", side: "D" },
+  me:         { name: "Deposit · Jordan", sub: "what we owe Jordan", side: "C" },
+  alex:       { name: "Deposit · Alex", sub: "what we owe Alex", side: "C" },
+};
+const EXT = "External checking ••4421";
+let S, seq = 0;
+const rid = p => `${p}_${(++seq).toString(36).padStart(3, "0")}${Math.random().toString(36).slice(2, 6)}`;
+function reset() {
+  S = { raw: { bank: 0, receivable: 0, pending: 0, losses: 0, me: 0, alex: 0 }, holds: {}, restr: {},
+        transfers: [], journals: [], bankTxns: [], clock: 0, writeOff: null, selected: null, done: {},
+        hood: "timeline", sheet: null, ai: null, pane: "app", bankCalls: [], webhooks: [],
+        recon: [], exceptions: [], report: null, reportTools: [], api: "POST /withdrawals", apiResult: null };
+}
+reset();
+const norm = k => ACC[k].side === "D" ? S.raw[k] : -S.raw[k];
+const active = o => Object.values(o).filter(x => x.status === "active").reduce((a, x) => a + x.amount, 0);
+const held = () => active(S.holds), restricted = () => active(S.restr);
+const available = () => norm("me") - held() - restricted();
+const fmt = m => (m < 0 ? "−" : "") + "$" + (Math.abs(m) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const T = () => `T+${S.clock}m`;
+const tById = id => S.transfers.find(t => t.id === id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+function ev(t, code, source, extra = {}) { t.events.push({ code, source, clock: S.clock, ...extra }); }
+function post(effect, amount, debit, credit, t, txn) {
+  const j = { id: rid("jrn"), effect, amount, debit, credit, tid: t && t.id, txn: txn && txn.id, clock: S.clock, fresh: true };
+  S.raw[debit] += amount; S.raw[credit] -= amount; S.journals.push(j);
+  if (txn) txn.journal = j.id;
+  return j;
+}
+function bankTxn(t, amount, kind) {
+  const x = { id: rid("txn"), amount, kind, tid: t ? t.id : null, clock: S.clock };
+  S.bankTxns.push(x); if (t) t.bank.txns.push(x); return x;
+}
+function bankCall(method, path, status, note, ms) {
+  S.bankCalls.unshift({ method, path, status, note, ms: ms || 120 + Math.round(Math.random() * 140), clock: S.clock });
+}
+function webhook(t, type, flags = "") {
+  const id = rid("evt");
+  S.webhooks.unshift({ id, type, ref: t.bank.id, result: "applied", flags, clock: S.clock });
+  if (Math.random() < 0.5) S.webhooks.unshift({ id, type, ref: t.bank.id, result: "duplicate", flags: "redelivered", clock: S.clock });
+}
+function newTransfer(kind, amount, extra = {}) {
+  const t = { id: rid("trf"), kind, amount, status: "created", events: [], bank: null, clock: S.clock, ...extra };
+  S.transfers.unshift(t); S.selected = t.id; return t;
+}
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.innerHTML = `<div class="toast">${msg}</div>`;
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => el.innerHTML = "", 2600);
+}
+
+const flows = {
+  payroll(amount = 200000) {
+    const t = newTransfer("payroll", amount, { title: "Payroll · Northwind Labs" });
+    t.bank = { id: rid("ach"), status: "received", txns: [] };
+    bankCall("POST", "/simulate/receive-ach-credit", 200, "sandbox: payroll");
+    const x = bankTxn(t, amount, "incoming");
+    ev(t, "payroll_received", "bank", { note: "Incoming ACH credit posted at the bank" });
+    webhook(t, "ach.incoming_transfer.completed");
+    post("ach_in.credit", amount, "bank", "me", t, x);
+    t.status = "completed"; ev(t, "completed", "api");
+    S.done.s1 = true;
+  },
+  pull(amount = 50000) {
+    const t = newTransfer("pull", amount, { title: `From ${EXT}` });
+    ev(t, "debit_authorized", "api", { note: "Authorization recorded (text v1, IP, time)" });
+    t.bank = { id: rid("ach"), status: "initiated", txns: [] };
+    bankCall("POST", "/transfers/ach", 200, `debit · Idempotency-Key ${t.id}`);
+    ev(t, "bank_initiated", "bank", { note: `Column ACH debit ${t.bank.id}` });
+    webhook(t, "ach.outgoing_transfer.initiated");
+    post("ach_debit.accept", amount, "receivable", "me", t);
+    S.restr[t.id] = { amount, status: "active", release: null };
+    ev(t, "restricted", "api");
+    t.status = "processing";
+  },
+  p2p(amount) {
+    if (available() < amount) return toast("Not enough available balance");
+    const t = newTransfer("p2p", amount, { title: "To Alex" });
+    post("p2p.transfer", amount, "me", "alex", t);
+    t.status = "completed"; ev(t, "completed", "api", { note: "Instant: ledger only, no bank involved" });
+    S.done.s3 = true;
+  },
+  withdraw(amount, drill) {
+    if (available() < amount) return toast("Not enough available balance");
+    const t = newTransfer("withdrawal", amount, { title: `To ${EXT}` });
+    S.holds[t.id] = { amount, status: "active" };
+    t.status = "held"; ev(t, "hold_placed", "api");
+    t.bank = { id: rid("ach"), status: "initiated", txns: [] };
+    const x = bankTxn(t, -amount, "initiation");
+    if (drill) {
+      bankCall("POST", "/transfers/ach", "timeout", `credit · Idempotency-Key ${t.id} · response lost`, 10000);
+      t.status = "unknown"; t.hiddenTxn = x;
+      ev(t, "bank_outcome_unknown", "bank", { note: "Timed out. The bank may or may not have created it." });
+      return;
+    }
+    bankCall("POST", "/transfers/ach", 200, `credit · Idempotency-Key ${t.id}`);
+    acceptWithdrawal(t, x);
+  },
+  retry(t) {
+    bankCall("POST", "/transfers/ach", 200, `retry · same Idempotency-Key ${t.id} · existing transfer returned`);
+    ev(t, "retry_same_key", "api", { note: `Idempotency-Key ${t.id}: bank returned the existing transfer` });
+    acceptWithdrawal(t, t.hiddenTxn); delete t.hiddenTxn;
+  },
+  advance() {
+    S.clock += 10;
+    for (const [tid, r] of Object.entries(S.restr)) {
+      if (r.status === "active" && r.release !== null && r.release <= S.clock) {
+        r.status = "released"; const t = tById(tid);
+        ev(t, "funds_available", "clock"); t.status = "available"; S.done.s2 = true; S.selected = tid;
+      }
+    }
+    for (const t of S.transfers) {
+      if (t.status !== "processing") continue;
+      bankCall("POST", "/simulate/transfers/ach/settle", 200, `settle ${t.bank.id}`);
+      t.bank.status = "settled";
+      if (t.kind === "pull") {
+        const x = bankTxn(t, t.amount, "settlement");
+        post("ach_debit.settle", t.amount, "bank", "receivable", t, x);
+        S.restr[t.id].release = S.clock + 10;
+      }
+      webhook(t, "ach.outgoing_transfer.settled", Math.random() < 0.5 ? "out of order" : "");
+      t.status = "settled"; ev(t, "settled", "bank"); S.selected = t.id;
+    }
+  },
+  chargeback() {
+    const t = S.transfers.find(t => t.kind === "pull" && ["settled", "available"].includes(t.status));
+    if (!t) return toast("Run S2 and advance the clock until it settles first");
+    t.bank.status = "returned"; t.returnCode = "R10";
+    const x = bankTxn(t, -t.amount, "return");
+    webhook(t, "ach.outgoing_transfer.returned");
+    post("ach_debit.return", t.amount, "me", "bank", t, x);
+    const r = S.restr[t.id];
+    if (r.status === "active") { r.status = "terminated"; ev(t, "restriction_ended", "api"); }
+    t.status = "returned";
+    ev(t, "returned", "bank", { note: "R10 · customer says the debit was not authorized" });
+    if (norm("me") < 0) ev(t, "account_negative", "api", { note: `Balance ${fmt(norm("me"))}. Sending and withdrawing are frozen.` });
+    S.selected = t.id;
+  },
+  requestWriteOff() { S.writeOff = { id: rid("wo"), amount: -norm("me"), status: "pending", by: "You" }; },
+  approveWriteOff() {
+    const w = S.writeOff;
+    const j = post("ach_debit.write_off", w.amount, "losses", "me", null);
+    w.status = "approved"; w.journal = j.id; S.done.s5 = true;
+  },
+  injectMismatch() {
+    // A bank-side transaction our books never heard about: reconciliation must catch it.
+    const x = { id: rid("txn"), amount: -2500, kind: "bank_adjustment", tid: null, clock: S.clock, injected: true };
+    S.bankTxns.push(x);
+    toast("Injected an unknown −$25.00 bank transaction. Run reconciliation.");
+  },
+  reconcile() {
+    const bankSide = S.bankTxns;
+    const matched = bankSide.filter(x => x.journal);
+    const unmatched = bankSide.filter(x => !x.journal);
+    for (const x of unmatched) {
+      if (S.exceptions.some(e => e.txn === x.id)) continue;
+      const t = x.tid && tById(x.tid);
+      S.exceptions.push({ id: rid("exc"), txn: x.id, amount: x.amount, status: "open", clock: S.clock,
+        kind: t && t.status === "unknown" ? "In flight: transfer awaiting bank confirmation" : "Bank has it, our books don't",
+        auto: !!(t && t.status === "unknown") });
+    }
+    for (const e of S.exceptions) {
+      const x = S.bankTxns.find(b => b.id === e.txn);
+      if (e.status === "open" && x && x.journal) { e.status = "auto-resolved"; e.note = "Posted after the transfer was confirmed"; }
+    }
+    const bankBal = bankSide.reduce((a, x) => a + x.amount, 0);
+    S.recon.unshift({ id: rid("rec"), clock: S.clock, scanned: bankSide.length, matched: matched.length,
+      exceptions: S.exceptions.filter(e => e.status === "open").length, bankBal, bookBal: norm("bank"), ms: 180 + bankSide.length * 9 });
+  },
+  resolveException(id) {
+    const e = S.exceptions.find(e => e.id === id);
+    e.status = "escalated"; e.note = "Escalated to Column with the transaction ID; held in suspense until explained";
+  },
+};
+function acceptWithdrawal(t, x) {
+  post("ach_credit.accept", t.amount, "me", "pending", t);
+  S.holds[t.id].status = "consumed";
+  post("ach_credit.cash_out", t.amount, "pending", "bank", t, x);
+  t.status = "processing"; ev(t, "bank_initiated", "bank", { note: "Column: credit funds leave at initiation" });
+  webhook(t, "ach.outgoing_transfer.initiated");
+  S.done.s4 = true;
+}
+
+// ================================================================== presentation helpers
+const STATUS = {
+  completed: ["Completed", "c-green"], processing: ["Processing", "c-blue"], held: ["Held", "c-amber"],
+  unknown: ["Confirming", "c-amber breathe"], settled: ["Settled", "c-green"], available: ["Available", "c-green"],
+  returned: ["Returned", "c-red"],
+};
+const chip = s => { const [l, c] = STATUS[s] || [s, "c-grey"]; return `<span class="chip ${c}">${l}</span>`; };
+const STEP = {
+  payroll_received: ["Payroll arrived", "green", "Usually same day"],
+  debit_authorized: ["You authorized the pull", "green"],
+  bank_initiated: ["Bank accepted the transfer", "blue"],
+  restricted: ["On hold until it settles", "amber"],
+  settled: ["Settled", "green", "Real world: 1–2 business days"],
+  funds_available: ["Funds available to spend", "green", "Real world: a few business days after settling"],
+  hold_placed: ["Money held for this withdrawal", "amber"],
+  bank_outcome_unknown: ["No reply from the bank. Confirming…", "amber", "Your money stays held until we know"],
+  retry_same_key: ["Confirmed with the bank. No duplicate.", "green"],
+  returned: ["Returned by the other bank", "red", "Real world: up to 60 days for unauthorized (R10)"],
+  restriction_ended: ["Hold released with the return", "amber"],
+  account_negative: ["Balance went negative", "red"],
+  completed: ["Completed", "green"],
+};
+const icon = t => ({ payroll: "↓", pull: "⇣", p2p: "→", withdrawal: "↑" })[t.kind];
+const incoming = t => t.kind === "payroll" || t.kind === "pull";
+function checks() {
+  const total = Object.values(S.raw).reduce((a, b) => a + b, 0);
+  const posted = S.bankTxns.filter(x => x.journal);
+  const once = posted.every(x => S.journals.filter(j => j.txn === x.id).length === 1);
+  const bankMatches = norm("bank") === posted.reduce((a, x) => a + x.amount, 0);
+  return [
+    ["Debits equal credits", total === 0, `Σ debits − Σ credits = ${fmt(total)}`],
+    ["Every bank transaction is posted at most once", once, `${posted.length} posted bank transactions, ${S.journals.filter(j => j.txn).length} cash journals`],
+    ["Cash at bank equals the posted bank transactions", bankMatches, `${fmt(norm("bank"))} in our books`],
+  ];
+}
+
+// seeded random, so sample charts are stable between renders
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const CHARTS = {};
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v || 1))); for (const m of [1, 2, 4, 8, 10]) if (m * p >= v) return m * p; return 10 * p; }
+// Line chart: thin 2px lines, recessive grid, crosshair + tooltip, legend + direct labels, table view.
+function lineChart(id, { series, labels, fmtv, height = 190, title, unit, width = 640 }) {
+  // Narrow cards get a narrower viewBox so axis text stays readable when scaled.
+  const W = width, H = height, L = 46, R = series.length > 1 ? 56 : 14, Tp = 10, B = 24;
+  const max = niceMax(Math.max(...series.flatMap(s => s.values)) * 1.08);
+  const x = i => L + i * (W - L - R) / (labels.length - 1);
+  const y = v => H - B - v / max * (H - Tp - B);
+  const ticks = [0, .25, .5, .75, 1].map(f => f * max);
+  const step = Math.ceil(labels.length / 6);
+  CHARTS[id] = { series, labels, fmtv, x, W, L, R };
+  const grid = ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="rgba(255,255,255,0.07)"/>
+    <text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="10.5" fill="rgba(241,247,242,0.45)" font-family="JetBrains Mono">${fmtv(v)}</text>`).join("");
+  const xl = labels.map((l, i) => i % step === 0 ? `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="10.5" fill="rgba(241,247,242,0.45)" font-family="JetBrains Mono">${l}</text>` : "").join("");
+  const paths = series.map(s => `<path d="${s.values.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join("")}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`).join("");
+  // Direct labels at the line ends, nudged apart so they never overlap.
+  const ends = series.map(s => ({ name: s.name, y: y(s.values[s.values.length - 1]) + 4 })).sort((a, b) => a.y - b.y);
+  for (let k = 1; k < ends.length; k++) ends[k].y = Math.max(ends[k].y, ends[k - 1].y + 14);
+  const direct = series.length > 1 && series.length <= 4 ? ends.map(e => `<text x="${W - R + 8}" y="${e.y}" font-size="11" fill="rgba(241,247,242,0.75)">${e.name}</text>`).join("") : "";
+  const legend = series.length > 1 ? `<div class="legend">${series.map(s => `<span><i style="background:${s.color}"></i>${s.name}</span>`).join("")}</div>` : "";
+  const table = `<details class="tbl"><summary>View as table</summary><table><tr><th>${unit || "t"}</th>${series.map(s => `<th class="num">${s.name}</th>`).join("")}</tr>
+    ${labels.map((l, i) => `<tr><td class="mono">${l}</td>${series.map(s => `<td class="num">${fmtv(s.values[i])}</td>`).join("")}</tr>`).join("")}</table></details>`;
+  return `<div class="chart-title"><b>${title}</b></div>${legend}<div class="chart" data-chart="${id}">
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">${grid}${xl}${paths}${direct}
+      <line class="xh" x1="0" x2="0" y1="${Tp}" y2="${H - B}" stroke="rgba(241,247,242,0.35)" stroke-dasharray="3 3" visibility="hidden"/>
+      ${series.map((s, k) => `<circle class="dot${k}" r="4" fill="${s.color}" stroke="#0D120F" stroke-width="2" visibility="hidden"/>`).join("")}
+      <rect x="${L}" y="${Tp}" width="${W - L - R}" height="${H - Tp - B}" fill="transparent" class="hit"/>
+    </svg><div class="tip"></div></div>${table}`;
+}
+document.addEventListener("mousemove", e => {
+  const rect = e.target.closest && e.target.closest(".chart rect.hit");
+  document.querySelectorAll(".chart").forEach(c => {
+    if (rect && c.contains(rect)) return;
+    c.querySelector(".tip").style.display = "none";
+    c.querySelectorAll(".xh, circle").forEach(n => n.setAttribute("visibility", "hidden"));
+  });
+  if (!rect) return;
+  const box = rect.closest(".chart"), cfg = CHARTS[box.dataset.chart], svg = box.querySelector("svg");
+  const r = svg.getBoundingClientRect(), sx = (e.clientX - r.left) * cfg.W / r.width;
+  const n = cfg.labels.length, i = Math.max(0, Math.min(n - 1, Math.round((sx - cfg.L) / ((cfg.W - cfg.L - cfg.R) / (n - 1)))));
+  const xh = svg.querySelector(".xh"); xh.setAttribute("x1", cfg.x(i)); xh.setAttribute("x2", cfg.x(i)); xh.setAttribute("visibility", "visible");
+  cfg.series.forEach((s, k) => { const d = svg.querySelector(`.dot${k}`);
+    const seg = svg.querySelectorAll("path")[k].getAttribute("d").split(/[ML]/).filter(Boolean)[i].split(",");
+    d.setAttribute("cx", seg[0]); d.setAttribute("cy", seg[1]); d.setAttribute("visibility", "visible"); });
+  const tip = box.querySelector(".tip");
+  tip.innerHTML = `<div class="mono faint" style="margin-bottom:4px">${cfg.labels[i]}</div>` + cfg.series.map(s => `<div class="row"><span><i style="background:${s.color}"></i> ${s.name}</span><b class="mono">${cfg.fmtv(s.values[i])}</b></div>`).join("");
+  tip.style.display = "block";
+  const px = cfg.x(i) / cfg.W * r.width;
+  tip.style.left = Math.min(px + 12, r.width - tip.offsetWidth) + "px"; tip.style.top = "8px";
+});
+
+// ================================================================== routing
+const routes = { "": landing, app: appView, ops: opsView, eng: engView };
+function route() { return location.hash.replace(/^#\/?/, "").split("/"); }
+function render() {
+  const [top] = route();
+  document.getElementById("nav").innerHTML = [["", "Home", "Home"], ["app", "Customer app", "App"], ["ops", "Operations", "Ops"], ["eng", "Engineering", "Eng"]]
+    .map(([r, n, s]) => `<a href="#/${r}" class="${r === top ? "on" : ""}"><span class="full">${n}</span><span class="short">${s}</span></a>`).join("");
+  document.getElementById("view").innerHTML = (routes[top] || landing)();
+  S.journals.forEach(j => j.fresh = false);
+}
+window.addEventListener("hashchange", () => { render(); scrollTo(0, 0); });
+function sideNav(base, groups, current) {
+  // Sidebar on wide screens; a single grouped select on narrow ones.
+  const select = `<select class="side-select" aria-label="Section" onchange="location.hash='#/${base}/'+this.value">${groups.map(([g, items]) =>
+    `<optgroup label="${g}">${items.map(([k, n]) => `<option value="${k}" ${k === current ? "selected" : ""}>${n}</option>`).join("")}</optgroup>`).join("")}</select>`;
+  return `${select}<div class="side-nav">${groups.map(([g, items]) => `<div class="grp">${g}</div>` + items.map(([k, n, badge]) =>
+    `<a href="#/${base}/${k}" class="${k === current ? "on" : ""}">${n}${badge ? `<span class="badge">${badge}</span>` : ""}</a>`).join("")).join("")}</div>`;
+}
+
+// ================================================================== landing
+function landing() {
+  const cases = [
+    ["S1", "Get paid", "Payroll lands as an incoming ACH credit and posts to the ledger.", "duplicate webhooks"],
+    ["S2", "Add money", "Pull $500 from another bank. It stays on hold until it settles.", "funds you can't spend yet"],
+    ["S3", "Pay a friend", "Send Alex $50 instantly. No bank involved, just the ledger.", "concurrent spends"],
+    ["S4", "Withdraw", "Send money out. The bank accepts it, but its reply gets lost.", "unknown outcomes"],
+    ["S5", "Chargeback", "A pull comes back as unauthorized after you spent it.", "negative balances"],
+  ];
+  return `<div class="wrap">
+    <section class="hero">
+      <div class="live"><i></i> Live sandbox · AWS · Column</div>
+      <h1><span class="accent">Every dollar,</span><br>accounted for.</h1>
+      <p>A neobank backend you can poke. Five everyday flows, a double-entry ledger, the internal tools that run it, and the failures real money systems have to survive.</p>
+      <div class="ctas"><a class="btn primary" href="#/app" onclick="reset()">Open a demo account</a><a class="btn ghost" href="#/eng/overview">How it's built</a></div>
+    </section>
+    <section class="cases">${cases.map(([n, h, p, s]) => `
+      <a class="card case" href="#/app"><span class="n">${n}</span><h3>${h}</h3><p>${p}</p><div class="survives">Survives <b>${s}</b></div></a>`).join("")}
+    </section>
+    <section class="tours">
+      <a class="card tour" href="#/app"><div class="who">For customers</div><h3>The app</h3><ul><li>Balance, available vs on hold</li><li>Send, add money, withdraw</li><li>Every step of a transfer, with real-world timing</li></ul></a>
+      <a class="card tour" href="#/ops/overview"><div class="who">For the team</div><h3>Operations</h3><ul><li>Customer 360 and transfers</li><li>Reconciliation against the bank</li><li>AI-drafted reports with citations</li></ul></a>
+      <a class="card tour" href="#/eng/overview"><div class="who">For engineers</div><h3>Engineering</h3><ul><li>Design: data model, money flows, consistency, failure modes, decisions</li><li>Build: API, ledger, code walkthrough, tests</li><li>Run and prove: infra, bank, SLOs, incident review, load test</li></ul></a>
+    </section>
+  </div>
+  <footer><div class="wrap">Fern is a portfolio demo by waken.dev. Sandbox only: no real money, no real identities, not a bank.</div></footer>`;
+}
+
+// ================================================================== customer app
+function rail() {
+  const steps = [["s1", "Get paid"], ["s2", "Pull in $500"], ["s3", "Pay Alex"], ["s4", "Withdraw"], ["s5", "Chargeback"]];
+  const next = steps.find(([k]) => !S.done[k]);
+  return `<div class="rail-wrap">
+    <div class="rail">${steps.map(([k, n], i) => `<button class="step ${S.done[k] ? "done" : ""} ${next && next[0] === k ? "next" : ""}" onclick="act('${k}')"><span class="num">${S.done[k] ? "✓" : i + 1}</span>${n}</button>`).join("")}</div>
+    <div class="clock"><span class="t">Demo clock ${T()}</span><button class="btn sm" onclick="act('advance')">Advance clock ⏵</button></div>
+  </div><p class="hint">${hintText()}</p>`;
+}
+function hintText() {
+  if (!S.done.s1) return "Start with <b>Get paid</b>: $2,000 of payroll arrives from the bank.";
+  const pull = S.transfers.find(t => t.kind === "pull");
+  if (!pull) return "Next, <b>Pull in $500</b> from an external account.";
+  if (!S.done.s2) return `The pull is ${pull.status}. Press <b>Advance clock</b> ${pull.status === "processing" ? "to settle it" : "again to release the hold"}. Each press stands in for real-world business days.`;
+  if (!S.done.s3) return "<b>Pay Alex</b> $50. It's instant because it never leaves the ledger.";
+  if (S.transfers.some(t => t.status === "unknown")) return "The bank never answered. Open the withdrawal and <b>retry with the same key</b>.";
+  if (!S.done.s4) return "<b>Withdraw</b> almost everything. The drill makes the bank swallow its reply.";
+  if (!S.transfers.some(t => t.status === "returned")) return "Now the <b>Chargeback</b>: the $500 pull comes back as unauthorized.";
+  if (!S.done.s5) return `Jordan is negative. Open <a href="#/ops/overview"><b>Operations</b></a> to investigate and write it off.`;
+  return `All five done. Try <a href="#/ops/recon"><b>reconciliation</b></a> or the <a href="#/ops/reports"><b>AI report</b></a>.`;
+}
+function appView() {
+  return `<div class="wrap">${rail()}
+    <div class="mobile-tabs"><button class="btn sm ${S.pane === "app" ? "primary" : ""}" onclick="S.pane='app';render()">App</button><button class="btn sm ${S.pane === "hood" ? "primary" : ""}" onclick="S.pane='hood';render()">Under the hood</button></div>
+    <div class="split" data-pane="${S.pane}">${phone()}${hood()}</div></div>`;
+}
+function phone() {
+  const neg = norm("me") < 0;
+  const items = S.transfers.map(t => `<div class="item ${t.id === S.selected ? "sel" : ""}" onclick="openDetail('${t.id}')">
+      <div class="icon">${icon(t)}</div><div class="mid"><div class="ttl">${t.title}</div>${chip(t.status)}</div>
+      <div class="amt ${incoming(t) && t.status !== "returned" ? "in" : ""}">${incoming(t) ? "+" : "−"}${fmt(t.amount)}</div></div>`).join("");
+  return `<div class="phone">
+    <div class="statusbar"><span>9:41</span><span>Fern</span></div>
+    ${neg ? `<div class="banner">Account frozen: your balance is negative.</div>` : ""}
+    <div class="bal-label">Balance</div>
+    <div class="balance ${neg ? "neg" : ""}">${fmt(norm("me"))}</div>
+    <div class="subbal"><span title="What you can spend right now">Available <b>${fmt(available())}</b></span>
+      <span title="Reserved for withdrawals the bank hasn't accepted yet">Held <b>${fmt(held())}</b></span>
+      <span title="Money pulled in that hasn't cleared its hold period">On hold <b>${fmt(restricted())}</b></span></div>
+    <div class="actions"><button class="btn" onclick="act('s2')" ${neg ? "disabled" : ""}>Add money</button>
+      <button class="btn" onclick="sheet('send')" ${neg ? "disabled" : ""}>Send</button>
+      <button class="btn primary" onclick="sheet('withdraw')" ${neg ? "disabled" : ""}>Withdraw</button></div>
+    <div class="act-title">Activity</div>
+    ${items || `<div class="empty">No activity yet. Start with “Get paid”.</div>`}
+    ${S.sheet ? sheetView() : ""}</div>`;
+}
+function sheetView() {
+  let body = "";
+  if (S.sheet.kind === "send") {
+    body = `<h3>Send to Alex</h3><div class="field"><label>Amount</label><input id="amt" type="number" value="50" min="1" step="0.01"></div>
+      <p class="faint small" style="margin:0 6px 14px">Instant. Moves between two deposit accounts in our ledger.</p>
+      <button class="btn primary" style="width:100%" onclick="submitSheet()">Send</button>`;
+  } else if (S.sheet.kind === "withdraw") {
+    const suggested = Math.max(0, Math.min(230000, available())) / 100;
+    body = `<h3>Withdraw</h3>
+      <div class="field"><label>Amount · available ${fmt(available())}</label><input id="amt" type="number" value="${suggested}" min="1" step="0.01"></div>
+      <div class="field"><label>To</label><input type="text" value="${EXT}" disabled></div>
+      <label class="toggle"><input id="drill" type="checkbox" checked><span><b>Failure drill:</b> the bank accepts this transfer but its reply never arrives.</span></label>
+      <button class="btn primary" style="width:100%" onclick="submitSheet()">Withdraw</button>`;
+  } else {
+    const t = tById(S.sheet.id);
+    body = `<h3>${t.title}</h3>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span class="mono" style="font-size:22px">${incoming(t) ? "+" : "−"}${fmt(t.amount)}</span>${chip(t.status)}</div>
+      <ul class="steps">${t.events.map(e => { const [txt, c, real] = STEP[e.code] || [e.code, "green"];
+        return `<li class="${c}">${txt}<div class="when">T+${e.clock}m${real ? ` · <span class="real">${real}</span>` : ""}</div></li>`; }).join("")}</ul>
+      ${t.status === "unknown" ? `<button class="btn primary" style="width:100%" onclick="act('retry','${t.id}')">Retry with the same key</button>` : ""}
+      <button class="btn ghost" style="width:100%;margin-top:8px" onclick="S.sheet=null;render()">Close</button>`;
+  }
+  return `<div class="sheet-bg" onclick="if(event.target===this){S.sheet=null;render()}"><div class="sheet"><div class="grab"></div>${body}</div></div>`;
+}
+function hood() {
+  const t = tById(S.selected);
+  const tabs = [["timeline", "Timeline"], ["ledger", "Ledger"], ["bank", "Bank"], ["checks", "Checks"]];
+  let body = "";
+  if (S.hood === "checks") body = checksView();
+  else if (!t) body = `<div class="empty">Run a scenario. Everything the backend does shows up here.</div>`;
+  else if (S.hood === "timeline") body = timelineView(t);
+  else if (S.hood === "ledger") {
+    const js = S.journals.filter(j => j.tid === t.id);
+    body = (t.status === "unknown" ? `<div class="callout amber">Nothing posted beyond the hold. We don't move money in the books until the bank confirms.</div>` : "")
+      + (js.map(journalView).join("") || `<div class="empty">No journals for this transfer.</div>`);
+  } else body = bankView(t);
+  return `<div class="card hood"><div class="hood-head"><h2>Under the hood</h2>${t ? `<span class="mono faint small">${t.id} · ${t.kind}</span>` : ""}</div>
+    <div class="tabs">${tabs.map(([k, n]) => `<button class="${S.hood === k ? "on" : ""}" onclick="S.hood='${k}';render()">${n}</button>`).join("")}</div>${body}</div>`;
+}
+function timelineView(t) {
+  return `<ul class="tl">${t.events.map(e => `<li><span class="code">T+${e.clock}m</span><span class="src ${e.source}">${e.source}</span>
+    <span>${(STEP[e.code] || [e.code])[0]} <span class="code">${e.code}</span>${e.note ? `<div class="faint small">${e.note}</div>` : ""}</span></li>`).join("")}</ul>`;
+}
+function journalView(j) {
+  const txn = j.txn ? ` · bank txn <span class="mono">${j.txn}</span>` : "";
+  return `<div class="journal ${j.fresh ? "fresh" : ""}"><div class="jh"><span class="eff">${j.effect}</span><span class="faint">${j.id}${txn} · T+${j.clock}m</span></div>
+    <div class="taccount"><div><div class="side">DEBIT</div><div class="acct">${ACC[j.debit].name}</div><div class="val">${fmt(j.amount)}</div></div>
+    <div><div class="side">CREDIT</div><div class="acct">${ACC[j.credit].name}</div><div class="val">${fmt(j.amount)}</div></div></div></div>`;
+}
+function bankView(t) {
+  if (!t.bank) return `<div class="empty">This transfer never touches the bank.</div>`;
+  return `${t.status === "unknown" ? `<div class="callout amber">The bank says <b>initiated</b>. We say <b>confirming</b>. Retrying with the same idempotency key reconciles the two without creating a second transfer.</div>` : ""}
+    <table><tr><th>Field</th><th>Value</th></tr><tr><td>Bank</td><td>Column (sandbox)</td></tr>
+      <tr><td>Bank transfer</td><td class="mono">${t.bank.id}</td></tr><tr><td>Bank status</td><td class="mono">${t.bank.status}</td></tr>
+      <tr><td>Our status</td><td>${(STATUS[t.status] || [t.status])[0]}</td></tr>${t.returnCode ? `<tr><td>Return code</td><td class="mono">${t.returnCode}</td></tr>` : ""}</table>
+    <h3 class="k">Bank transactions</h3>
+    <table><tr><th>Txn</th><th>Kind</th><th class="num">Amount</th><th>In our books</th></tr>
+      ${t.bank.txns.map(x => `<tr><td class="mono">${x.id}</td><td>${x.kind}</td><td class="num">${x.amount > 0 ? "+" : ""}${fmt(x.amount)}</td>
+      <td>${x.journal ? `<span class="chip c-green">posted</span>` : `<span class="chip c-amber">not yet</span>`}</td></tr>`).join("")}</table>`;
+}
+function checksView() {
+  return checks().map(([n, ok, d]) => `<div class="check"><span class="ok ${ok ? "" : "bad"}">${ok ? "✓" : "!"}</span><div><div>${n}</div><div class="faint small">${d}</div></div></div>`).join("")
+    + `<h3 class="k">Trial balance</h3>${trialBalance()}`;
+}
+function trialBalance() {
+  return `<table><tr><th>Account</th><th>Normal side</th><th class="num">Balance</th></tr>
+    ${Object.keys(ACC).map(k => `<tr><td>${ACC[k].name}<div class="faint small">${ACC[k].sub}</div></td><td>${ACC[k].side === "D" ? "Debit" : "Credit"}</td><td class="num">${fmt(norm(k))}</td></tr>`).join("")}</table>`;
+}
+
+// ================================================================== operations
+function opsView() {
+  const page = route()[1] || "overview";
+  const openExc = S.exceptions.filter(e => e.status === "open").length;
+  const unknown = S.transfers.filter(t => t.status === "unknown").length;
+  const pages = { overview: opsOverview, transfers: opsTransfers, recon: opsRecon, reports: opsReports };
+  return `<div class="wrap"><div class="page-title"><h1>Operations</h1><p>What support, risk and finance see for this demo space.</p></div>
+    <div class="with-side">${sideNav("ops", [["Customers", [["overview", "Customer 360"], ["transfers", "Transfers", unknown || ""]]],
+      ["Finance", [["recon", "Reconciliation", openExc || ""]]], ["AI", [["reports", "Reports"]]]], page)}
+    <div class="stack">${(pages[page] || opsOverview)()}</div></div></div>`;
+}
+function opsOverview() {
+  const neg = norm("me") < 0, w = S.writeOff;
+  return `<div class="grid g2">
+      <div class="card pad"><div class="who"><div class="avatar">J</div><div><b>Jordan Rivera</b><div class="faint small">Primary customer · KYC verified</div></div></div>
+        <div class="kv"><span>Balance</span><b style="color:${neg ? "var(--red)" : "inherit"}">${fmt(norm("me"))}</b></div>
+        <div class="kv"><span>Available</span><b>${fmt(available())}</b></div><div class="kv"><span>Held</span><b>${fmt(held())}</b></div>
+        <div class="kv"><span>On hold</span><b>${fmt(restricted())}</b></div>
+        <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">${neg ? `<span class="chip c-red">Negative</span><span class="chip c-red">Frozen</span>` : `<span class="chip c-green">In good standing</span>`}</div></div>
+      <div class="card pad"><div class="who"><div class="avatar" style="background:var(--blue-soft);color:var(--blue)">A</div><div><b>Alex</b><div class="faint small">Demo contact</div></div></div>
+        <div class="kv"><span>Balance</span><b>${fmt(norm("alex"))}</b></div></div>
+    </div>
+    ${neg || w ? `<div class="card pad"><h2 class="t">Negative balance</h2>
+      ${!w ? `<p class="muted" style="margin:0 0 14px">Jordan owes ${fmt(-norm("me"))} after a returned pull. Request a write-off; a second person must approve it.</p>
+        <button class="btn primary" onclick="act('requestWriteOff')">Request write-off of ${fmt(-norm("me"))}</button>` : `
+      <div class="approvals"><div class="approver"><div class="avatar">Y</div><div>You<div class="faint small">requested ${fmt(w.amount)}</div></div><span class="chip c-green">done</span></div>
+        <div class="approver"><div class="avatar bot">S</div><div>Simulated approver<div class="faint small">second person, simulated for this demo</div></div>${w.status === "approved" ? `<span class="chip c-green">approved</span>` : `<span class="chip c-amber">waiting</span>`}</div></div>
+      ${w.status === "pending" ? `<button class="btn primary" onclick="act('approveWriteOff')">Approve as second person</button>`
+        : `<div class="callout green" style="margin:0">Written off. <span class="mono">ach_debit.write_off</span> debited Return losses and brought Jordan back to $0.00. Cash at bank did not move.</div>`}`}</div>` : ""}
+    <div class="card pad"><h2 class="t">Ask the ops assistant</h2>
+      <div style="display:flex;gap:8px"><input id="q" type="text" value="${neg ? "Why is Jordan's balance negative?" : "Summarize Jordan's account."}"><button class="btn primary" onclick="act('ai')">Investigate</button></div>
+      ${S.ai ? `<div class="ai-answer" style="margin-top:14px">${S.ai}</div><div class="ai-note">AI draft from read-only ledger tools. Every claim links to a record; verify before acting.</div>` : ""}</div>`;
+}
+function opsTransfers() {
+  const rows = [...S.transfers].sort((a, b) => (b.status === "unknown") - (a.status === "unknown")).map(t => `
+    <tr class="click" onclick="goTo('${t.id}')"><td class="mono faint">T+${t.clock}m</td><td>${t.kind}</td><td>${t.title}</td><td>${chip(t.status)}</td><td class="num">${fmt(t.amount)}</td><td class="mono faint">${t.bank ? t.bank.id : "—"}</td></tr>`).join("");
+  return `<div class="card pad"><h2 class="t">Transfers</h2>${S.transfers.some(t => t.status === "unknown") ? `<div class="callout amber">Transfers with an unknown bank outcome are pinned to the top. Money stays held until the bank confirms.</div>` : ""}
+    ${rows ? `<table><tr><th>When</th><th>Type</th><th>Description</th><th>Status</th><th class="num">Amount</th><th>Bank ID</th></tr>${rows}</table>` : `<div class="empty">No transfers yet. Run the scenarios in the customer app.</div>`}</div>`;
+}
+function opsRecon() {
+  const last = S.recon[0];
+  const bankBal = S.bankTxns.reduce((a, x) => a + x.amount, 0);
+  const rows = S.bankTxns.slice().reverse().map(x => {
+    const j = x.journal && S.journals.find(j => j.id === x.journal);
+    return `<div class="match"><div><span class="mono">${x.id}</span> <span class="faint small">${x.kind}</span><div class="mono">${x.amount > 0 ? "+" : ""}${fmt(x.amount)}</div></div>
+      <div class="mid">${j ? `<span class="chip c-green">matched</span>` : `<span class="chip c-amber">unmatched</span>`}</div>
+      <div>${j ? `<span class="mono" style="color:var(--fern)">${j.effect}</span><div class="mono faint small">${j.id}</div>` : `<span class="faint">no journal</span>`}</div></div>`; }).join("");
+  return `<div class="card pad">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center"><h2 class="t" style="margin:0">Reconciliation</h2>
+        <div style="display:flex;gap:8px"><button class="btn sm ghost" onclick="act('injectMismatch')">Inject a mismatch</button><button class="btn sm primary" onclick="act('reconcile')">Run reconciliation</button></div></div>
+      <p class="muted small" style="margin:8px 0 14px">Pulls every transaction from the bank independently of webhooks and matches each one to exactly one cash journal by bank transaction ID.</p>
+      <div class="grid g4">
+        <div class="card stat"><div class="lbl">Bank balance (Column)</div><div class="val">${fmt(bankBal)}</div><div class="sub">sum of bank transactions</div></div>
+        <div class="card stat"><div class="lbl">Cash at bank (our books)</div><div class="val">${fmt(norm("bank"))}</div><div class="sub">ledger account</div></div>
+        <div class="card stat ${bankBal === norm("bank") ? "good" : "warn"}"><div class="lbl">Difference</div><div class="val">${fmt(bankBal - norm("bank"))}</div><div class="sub">${bankBal === norm("bank") ? "in agreement" : "needs explaining"}</div></div>
+        <div class="card stat ${S.exceptions.some(e => e.status === "open") ? "warn" : "good"}"><div class="lbl">Open exceptions</div><div class="val">${S.exceptions.filter(e => e.status === "open").length}</div><div class="sub">${last ? `last run T+${last.clock}m` : "not run yet"}</div></div>
+      </div></div>
+    ${S.exceptions.length ? `<div class="card pad"><h2 class="t">Exceptions</h2><table><tr><th>Found</th><th>Bank txn</th><th class="num">Amount</th><th>Type</th><th>Status</th><th></th></tr>
+      ${S.exceptions.map(e => `<tr><td class="mono faint">T+${e.clock}m</td><td class="mono">${e.txn}</td><td class="num">${fmt(e.amount)}</td><td>${e.kind}${e.note ? `<div class="faint small">${e.note}</div>` : ""}</td>
+        <td>${e.status === "open" ? `<span class="chip c-amber">open</span>` : e.status === "escalated" ? `<span class="chip c-violet">escalated</span>` : `<span class="chip c-green">${e.status}</span>`}</td>
+        <td>${e.status === "open" && !e.auto ? `<button class="btn sm" onclick="act('resolve','${e.id}')">Escalate</button>` : ""}</td></tr>`).join("")}</table></div>` : ""}
+    <div class="card pad"><h2 class="t">Transaction matching</h2>${rows || `<div class="empty">No bank transactions yet.</div>`}</div>
+    <div class="card pad"><h2 class="t">Runs</h2>${S.recon.length ? `<table><tr><th>Run</th><th>When</th><th class="num">Scanned</th><th class="num">Matched</th><th class="num">Exceptions</th><th class="num">Duration</th></tr>
+      ${S.recon.map(r => `<tr><td class="mono">${r.id}</td><td class="mono faint">T+${r.clock}m</td><td class="num">${r.scanned}</td><td class="num">${r.matched}</td><td class="num">${r.exceptions}</td><td class="num">${r.ms} ms</td></tr>`).join("")}</table>` : `<div class="empty">Runs every 15 minutes in production. Press “Run reconciliation”.</div>`}</div>`;
+}
+function opsReports() {
+  return `<div class="card pad">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center"><h2 class="t" style="margin:0">Daily operations report</h2>
+        <button class="btn sm primary" onclick="act('report')">${S.report ? "Regenerate" : "Generate report"}</button></div>
+      <p class="muted small" style="margin:8px 0 0">The agent can only read: it calls the tools below, then drafts. Numbers come from tool results, not from the model.</p></div>
+    ${S.reportTools.length ? `<div class="card pad"><h3 class="k" style="margin-top:0">Tool calls</h3>${S.reportTools.map(([fn, out]) => `<div class="tool"><span class="fn">${fn}</span><span class="faint small">${out}</span></div>`).join("")}</div>` : ""}
+    ${S.report ? `<div class="card pad report">${S.report}<div class="ai-note">AI draft · read-only tools · every figure links to a record. A person reviews before it's shared.</div></div>` : ""}`;
+}
+function cite(j, text) { return j ? `<button class="cite" onclick="goTo('${j.tid || ""}','ledger')">${text}</button>` : ""; }
+function aiAnswer() {
+  const ret = S.journals.find(j => j.effect === "ach_debit.return");
+  const wd = S.journals.find(j => j.effect === "ach_credit.accept");
+  const rel = S.transfers.find(t => t.kind === "pull" && t.events.some(e => e.code === "funds_available"));
+  if (ret && norm("me") < 0) {
+    return `Jordan's balance is <b>${fmt(norm("me"))}</b>. The ${fmt(ret.amount)} pull from ${EXT} was returned as unauthorized (R10) ${cite(ret, "ach_debit.return")} after its hold had already ended ${rel ? `<button class="cite" onclick="goTo('${rel.id}','timeline')">funds_available</button>` : ""}, and ${wd ? fmt(wd.amount) : "money"} had been withdrawn in the meantime ${cite(wd, "ach_credit.accept")}. Cash at bank fell by the same ${fmt(ret.amount)}, so the books still balance.<br><br><b>Suggested next step:</b> start collections, or request a write-off of ${fmt(-norm("me"))} if it can't be recovered.`;
+  }
+  const n = S.transfers.length;
+  return `Jordan has <b>${fmt(norm("me"))}</b> (${fmt(available())} available) across ${n} transfer${n === 1 ? "" : "s"}. ${S.transfers.some(t => t.status === "unknown") ? "One withdrawal is waiting for the bank to confirm; the money is held, not lost." : "Nothing needs attention."}`;
+}
+function buildReport() {
+  const by = k => S.transfers.filter(t => t.kind === k);
+  const sumOf = arr => arr.reduce((a, t) => a + t.amount, 0);
+  const inflow = sumOf(by("payroll")) + sumOf(by("pull").filter(t => t.status !== "returned"));
+  const outflow = sumOf(by("withdrawal"));
+  const unk = S.transfers.filter(t => t.events.some(e => e.code === "bank_outcome_unknown"));
+  const ret = S.journals.find(j => j.effect === "ach_debit.return");
+  const wo = S.journals.find(j => j.effect === "ach_debit.write_off");
+  const ok = checks().every(c => c[1]);
+  const exc = S.exceptions;
+  S.reportTools = [
+    ["get_trial_balance()", `${Object.keys(ACC).length} accounts · ${ok ? "balanced" : "UNBALANCED"}`],
+    ["list_transfers(since=T+0m)", `${S.transfers.length} transfers`],
+    ["list_transfer_events(code=bank_outcome_unknown)", `${unk.length} event(s)`],
+    ["list_returns()", ret ? "1 return (R10)" : "none"],
+    ["get_reconciliation_summary()", `${S.recon.length} run(s) · ${exc.filter(e => e.status === "open").length} open exception(s)`],
+    ["get_service_metrics(window=24h)", "p95 41 ms · 5xx 0.02% (sample)"],
+  ];
+  const gap = S.bankTxns.reduce((a, x) => a + x.amount, 0) - norm("bank");
+  const books = !ok ? "The books are <b>not balanced</b>, which needs immediate attention."
+    : gap ? `The books balance internally, but cash at the bank differs from our books by <b>${fmt(gap)}</b>. See reconciliation.`
+    : "The books are balanced: debits equal credits and cash matches the bank.";
+  return `<h4>Summary</h4><p>${S.transfers.length} transfers moved ${fmt(inflow)} in and ${fmt(outflow)} out. ${books}</p>
+    <h4>Money movement</h4><table><tr><th>Flow</th><th class="num">Count</th><th class="num">Amount</th></tr>
+      ${[["Payroll in", "payroll"], ["Pulls in", "pull"], ["P2P", "p2p"], ["Withdrawals", "withdrawal"]].map(([n, k]) => `<tr><td>${n}</td><td class="num">${by(k).length}</td><td class="num">${fmt(sumOf(by(k)))}</td></tr>`).join("")}</table>
+    <h4>Incidents</h4><p>${unk.length ? `${unk.length} withdrawal(s) had an unknown bank outcome ${unk.map(t => `<button class="cite" onclick="goTo('${t.id}','timeline')">${t.id}</button>`).join(" ")}. Each was resolved by retrying with the same idempotency key; the bank shows one transfer per request.` : "None."}</p>
+    <h4>Returns and losses</h4><p>${ret ? `One pull was returned as unauthorized ${cite(ret, "ach_debit.return")}, leaving the customer negative. ${wo ? `It was written off with two approvals ${cite(wo, "ach_debit.write_off")}.` : "A write-off is pending."}` : "No returns."}</p>
+    <h4>Reconciliation</h4><p>${S.recon.length ? `${S.recon.length} run(s); ${exc.length} exception(s) found, ${exc.filter(e => e.status === "open").length} still open.${exc.some(e => e.status === "escalated") ? " One unexplained bank transaction was escalated to Column." : ""}` : "Not run in this window. Recommend running before close."}</p>
+    <h4>Recommendations</h4><p>${[!S.recon.length && "Run reconciliation before end of day.", exc.some(e => e.status === "open") && "Close the open reconciliation exceptions.", ret && !wo && "Approve or reject the pending write-off.", "Keep the pull hold period at its current length; the return arrived after funds were released."].filter(Boolean).join(" ")}</p>`;
+}
+
+// ================================================================== engineering
+// Built for a technical review: every claim links to code, a test, or a measured sandbox behaviour.
+const ENG_NAV = [
+  ["Start", [["overview", "Start here"]]],
+  ["Design", [["design", "Architecture"], ["datamodel", "Data model"], ["flows", "Money flows"], ["consistency", "Consistency"], ["failures", "Failure modes"], ["decisions", "Decisions"], ["scaling", "Scaling & limits"]]],
+  ["Build", [["api", "API"], ["ledger", "Ledger"], ["code", "Code walkthrough"], ["testing", "Testing"]]],
+  ["Run", [["infra", "Infrastructure"], ["bank", "Bank integration"], ["monitoring", "Monitoring & SLOs"], ["incidents", "Incident review"]]],
+  ["Prove", [["loadtest", "Load test report"], ["drills", "Failure drills"], ["qa", "Hard questions"]]],
+];
+function engView() {
+  const page = route()[1] || "overview";
+  const pages = { overview: engOverview, design: engDesign, datamodel: engDataModel, flows: engFlows, consistency: engConsistency,
+    failures: engFailures, decisions: engDecisions, scaling: engScaling, api: engApi, ledger: engLedger, code: engCode, testing: engTesting,
+    infra: engInfra, bank: engBank, monitoring: engMonitoring, incidents: engIncidents, loadtest: engLoadtest, drills: engDrills, qa: engQA };
+  const flat = ENG_NAV.flatMap(([, items]) => items), i = flat.findIndex(([k]) => k === page);
+  const prev = flat[i - 1], next = flat[i + 1];
+  const pager = `<div class="pager">${prev ? `<a class="btn sm ghost" href="#/eng/${prev[0]}">← ${prev[1]}</a>` : "<span></span>"}${next ? `<a class="btn sm ghost" href="#/eng/${next[0]}">${next[1]} →</a>` : ""}</div>`;
+  return `<div class="wrap"><div class="page-title"><h1>Engineering</h1><p>Python · FastAPI · Postgres · Column sandbox · AWS EKS for 72 hours, then a static archive.</p></div>
+    <div class="with-side">${sideNav("eng", ENG_NAV, page)}<div class="stack">${(pages[page] || engOverview)()}${pager}</div></div></div>`;
+}
+const L = (page, text) => `<a href="#/eng/${page}" class="lnk">${text}</a>`;
+const src = (path, text) => `<span class="srcref mono">${text || path}</span>`;
+function hl(code) {
+  const e = code.replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  return e.replace(/(#[^\n]*|--[^\n]*|\/\/[^\n]*)|("(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*')|\b(async|await|def|return|raise|if|elif|else|for|in|not|and|or|try|except|as|with|None|True|False|class|SELECT|FROM|WHERE|GROUP BY|HAVING|LEFT JOIN|ON|AND|OR|INSERT|INTO|VALUES|UPDATE|SET|FOR UPDATE|ORDER BY|export|const|function|import)\b/g,
+    (m, c, s, k) => c ? `<span class="hc">${c}</span>` : s ? `<span class="hs">${s}</span>` : `<span class="hk">${k}</span>`);
+}
+const codeBlock = (code, file) => `${file ? `<div class="codefile mono">${file}</div>` : ""}<pre class="code">${hl(code.trim())}</pre>`;
+function states(list) {
+  return `<div class="states">${list.map(s => Array.isArray(s) ? `<span class="chip flat ${s[1]}">${s[0]}</span>` : `<span class="arrow">${s}</span>`).join("")}</div>`;
+}
+function seqDiagram(lanes, msgs, label) {
+  const W = 700, X = lanes.map((_, i) => 70 + i * (W - 140) / (lanes.length - 1)), H = 64 + msgs.length * 38;
+  return `<svg class="seq" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">
+    ${lanes.map((l, i) => `<text x="${X[i]}" y="20" text-anchor="middle" font-size="13" font-weight="600" fill="#F1F7F2">${l}</text>
+      <line x1="${X[i]}" x2="${X[i]}" y1="32" y2="${H - 8}" stroke="rgba(255,255,255,0.12)" stroke-dasharray="4 4"/>`).join("")}
+    ${msgs.map(([a, b, txt, c], k) => { const y = 56 + k * 38, col = c === "amber" ? "#F2B84B" : c === "red" ? "#FF6F61" : c === "blue" ? "#7CC0FF" : "#52E08A";
+      if (a === b) return `<rect x="${X[a] - 6}" y="${y - 13}" width="12" height="20" rx="3" fill="${col}" opacity=".35"/><text x="${X[a] + 14}" y="${y + 1}" font-size="11.5" fill="rgba(241,247,242,0.8)">${txt}</text>`;
+      const x1 = X[a], x2 = X[b], dir = x2 > x1 ? 1 : -1;
+      return `<line x1="${x1}" x2="${x2 - dir * 6}" y1="${y}" y2="${y}" stroke="${col}" stroke-width="1.6"/><path d="M${x2},${y} l${-dir * 8},-4 v8 z" fill="${col}"/>
+        <text x="${(x1 + x2) / 2}" y="${y - 7}" text-anchor="middle" font-size="11.5" fill="rgba(241,247,242,0.8)">${txt}</text>`; }).join("")}
+  </svg>`;
+}
+
+function engOverview() {
+  const hard = [
+    ["Never paying out twice when the bank doesn't answer", "A lost response is classified as unknown, the money stays held, and the retry reuses the transfer id as Column's Idempotency-Key.", "failures"],
+    ["Never letting a customer spend money that hasn't arrived", "Pulled money is credited but restricted until it settles and a hold period passes; a return before release costs nothing.", "flows"],
+    ["Webhooks that repeat, arrive late, or arrive out of order", "A webhook only says “look again”: we re-fetch the transfer and recompute every entry its state implies. The ledger skips what it already has.", "consistency"],
+    ["Two requests spending the same dollar", "Account rows are locked in a fixed order before the available balance is read; the check and the hold commit together.", "consistency"],
+    ["Proving the books are right", "Four invariants checked continuously, reconciliation against Column's own transactions, and a correctness section in every load test.", "ledger"],
+  ];
+  return `<div class="card pad"><h2 class="t">Start here</h2>
+      <p class="muted" style="margin:0 0 14px">Fern is a working neobank backend: five everyday flows on a double-entry ledger, wired to the Column sandbox, with the internal tools to run it. This section is written for an engineering review. Each page ends with links to the code and tests behind it.</p>
+      <div class="grid g6">${[["5", "user flows"], ["10", "accounting effects"], ["5", "ledger account roles"], ["4", "idempotency layers"], ["24", "automated tests"], ["0", "money moved via a queue"]]
+        .map(([v, l]) => `<div class="card stat"><div class="val">${v}</div><div class="lbl">${l}</div></div>`).join("")}</div></div>
+    <div class="card pad"><h2 class="t">The five hard problems</h2><table><tr><th style="width:32%">Problem</th><th>How Fern handles it</th><th></th></tr>
+      ${hard.map(([p, h, l]) => `<tr><td><b style="font-weight:600">${p}</b></td><td class="muted">${h}</td><td><a class="btn sm ghost" href="#/eng/${l}">Details</a></td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">If you have 10 minutes</h2><ol class="tour-list">
+      <li>${L("flows", "Money flows")}: pick S4 and read the sequence diagram for a lost bank response.</li>
+      <li>${L("consistency", "Consistency")}: transaction boundaries, lock order, and the four idempotency layers.</li>
+      <li>${L("code", "Code walkthrough")}: the ~40 lines that make bank events order-insensitive.</li>
+      <li>${L("failures", "Failure modes")}: every failure we know of, how it's detected, and which test covers it.</li>
+      <li>${L("qa", "Hard questions")}: the questions I'd ask if I were reviewing this, with answers.</li></ol></div>`;
+}
+
+function engDesign() {
+  const modules = [
+    ["fern.ledger", "Double-entry posting. One legal debit/credit shape per effect; cash only with a bank transaction behind it.", "src/fern/ledger.py"],
+    ["fern.payments", "The five flows; turning bank state into ledger entries; unknown-outcome recovery; write-offs.", "src/fern/payments.py"],
+    ["fern.bank", "Bank interface, error classes (rejected / unknown / conflict), simulated bank with fault injection.", "src/fern/bank.py"],
+    ["fern.column", "Column sandbox adapter: status mapping, cash moments, retries on 429, conflict detection.", "src/fern/column.py"],
+    ["fern.spaces", "Demo spaces: customers, ledger accounts, one Column bank account per visitor.", "src/fern/spaces.py"],
+    ["fern.platform", "Config, DB transactions with deadlock retry, sessions, API idempotency, migrations.", "src/fern/platform/"],
+    ["fern.api", "FastAPI routes; maps business errors to HTTP; stores and replays idempotent responses.", "src/fern/api.py"],
+  ];
+  return `<div class="card pad"><h2 class="t">Architecture</h2>
+      <div class="arch flow"><div class="node"><b>Browser</b>This app, served from waken.dev</div><div class="node"><b>Cloudflare Worker</b>Routes /apps/fern to AWS; WAF and rate limits</div>
+        <div class="node money"><b>FastAPI monolith</b>API pods + worker pods, one image</div><div class="node money"><b>Postgres (RDS Multi-AZ)</b>The books and all money state</div></div>
+      <div class="arch" style="grid-template-columns:repeat(3,1fr)"><div class="node money"><b>Column (sandbox)</b>ACH credits and debits; one bank account per demo space</div>
+        <div class="node"><b>Plaid (sandbox)</b>Account and routing numbers for pulls</div><div class="node"><b>Prometheus · Grafana · Claude</b>Metrics, dashboards, read-only ops agent</div></div>
+      <p class="legend-line">Green outline = on the money path. Nothing on the money path is asynchronous infrastructure: no queue, no stream, no cache.</p></div>
+    <div class="card pad"><h2 class="t">Request path for a withdrawal</h2>
+      ${states([["Client", "c-grey"], "→", ["Worker: path + auth header", "c-grey"], "→", ["ALB", "c-grey"], "→", ["FastAPI: session → space", "c-blue"], "→", ["DB tx: idempotency + lock + hold", "c-green"], "→", ["Column call (no tx open)", "c-amber"], "→", ["DB tx: apply bank state", "c-green"]])}
+      <p class="muted small" style="margin:12px 0 0">Two short database transactions with the bank call between them. The first makes the request safe to repeat; the second is safe to repeat by construction.</p></div>
+    <div class="card pad"><h2 class="t">Modules</h2><table><tr><th>Module</th><th>Responsibility</th><th>Code</th></tr>
+      ${modules.map(([m, r, f]) => `<tr><td class="mono" style="color:var(--fern)">${m}</td><td class="muted">${r}</td><td>${src(f)}</td></tr>`).join("")}</table>
+      <p class="faint small" style="margin:10px 0 0">A modular monolith on purpose: the money path needs one database transaction, not a distributed one. Splitting a service out (e.g. webhook ingest in Go) is in ${L("scaling", "Scaling & limits")}.</p></div>`;
+}
+
+function engDataModel() {
+  const B = (x, y, name, cols, money) => `<g><rect x="${x}" y="${y}" width="146" height="${30 + cols.length * 15}" rx="10" fill="#111814" stroke="${money ? "rgba(82,224,138,0.55)" : "rgba(255,255,255,0.14)"}"/>
+    <text x="${x + 10}" y="${y + 19}" font-size="12" font-weight="600" fill="#F1F7F2" font-family="JetBrains Mono">${name}</text>
+    ${cols.map((c, i) => `<text x="${x + 10}" y="${y + 36 + i * 15}" font-size="10.5" fill="rgba(241,247,242,0.6)" font-family="JetBrains Mono">${c}</text>`).join("")}</g>`;
+  const C = [10, 160, 310, 460, 610], R = [10, 130, 250];
+  const pos = { spaces: [0, 0], customers: [1, 0], accounts: [2, 0], postings: [3, 0], idem: [0, 1], transfers: [1, 1], journals: [2, 1], btx: [3, 1], bev: [4, 1], wo: [0, 2], holds: [1, 2], restr: [2, 2], tev: [3, 2] };
+  const ctr = k => [C[pos[k][0]] + 73, R[pos[k][1]] + 40];
+  const rel = [["customers", "spaces"], ["accounts", "customers"], ["postings", "accounts"], ["postings", "journals"], ["journals", "accounts"], ["journals", "transfers"], ["journals", "btx"], ["transfers", "customers"], ["holds", "transfers"], ["restr", "transfers"], ["tev", "transfers"], ["wo", "customers"], ["idem", "spaces"]];
+  const svg = `<svg class="seq" viewBox="0 0 760 340" role="img" aria-label="Entity relationship diagram">
+    ${rel.map(([a, b]) => { const [x1, y1] = ctr(a), [x2, y2] = ctr(b); return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="rgba(82,224,138,0.22)" stroke-width="1.4"/>`; }).join("")}
+    ${B(C[0], R[0], "spaces", ["id", "bank_account_id ◆"])}
+    ${B(C[1], R[0], "customers", ["id, space_id", "kind, display_name"])}
+    ${B(C[2], R[0], "accounts", ["role, customer_id", "raw_sum_minor"], 1)}
+    ${B(C[3], R[0], "postings", ["journal_id", "account_id, ±amount"], 1)}
+    ${B(C[0], R[1], "idempotency_req", ["(space, principal,", " op, key) PK"])}
+    ${B(C[1], R[1], "transfers", ["kind, status", "bank_transfer_id ◆"])}
+    ${B(C[2], R[1], "journals", ["effect, amount", "dedupe_key ◆", "bank_txn_id ◆"], 1)}
+    ${B(C[3], R[1], "bank_transactions", ["(provider, txn id) ◆", "±amount, posted_at"], 1)}
+    ${B(C[4], R[1], "bank_events", ["(provider, event_id)", "PK: webhook inbox"])}
+    ${B(C[0], R[2], "write_offs", ["requested_by", "approved_by ≠ req"])}
+    ${B(C[1], R[2], "holds", ["transfer_id PK", "status"], 1)}
+    ${B(C[2], R[2], "restrictions", ["transfer_id PK", "release_at, status"], 1)}
+    ${B(C[3], R[2], "transfer_events", ["transfer_id", "event, detail"])}
+  </svg>`;
+  const cons = [
+    ["journals.dedupe_key", "UNIQUE", "Each accounting effect of a transfer posts once, e.g. <span class=mono>{transfer}:ach_credit.cash_out</span>. Replays become no-ops."],
+    ["journals.bank_transaction_id", "UNIQUE", "A bank transaction backs at most one journal: cash can't be counted twice."],
+    ["bank_transactions (provider, provider_txn_id)", "UNIQUE", "Re-reading the same Column transfer never creates a new cash movement."],
+    ["transfers.bank_transfer_id", "UNIQUE", "One of our transfers maps to exactly one Column transfer."],
+    ["holds.transfer_id, restrictions.transfer_id", "PRIMARY KEY", "At most one hold per withdrawal and one restriction per pull."],
+    ["idempotency_requests", "PRIMARY KEY (space, principal, operation, key)", "API retries return the stored response; concurrent duplicates block on the row."],
+    ["bank_events (provider, event_id)", "PRIMARY KEY", "Webhook inbox; written after the event is applied."],
+    ["postings.amount_minor", "CHECK ≠ 0", "No empty postings."],
+    ["write_offs", "CHECK approved_by ≠ requested_by", "Two-person rule enforced by the database, not just the UI."],
+    ["accounts.raw_sum_minor", "Checked invariant", "Equals the sum of its postings; updated in the same transaction and re-checked continuously."],
+  ];
+  return `<div class="card pad"><h2 class="t">Entity relationships</h2>${svg}
+      <p class="legend-line">Green = money tables. ◆ = unique constraint the money path relies on. Every row carries <span class="mono">space_id</span>; queries always filter on it.</p></div>
+    <div class="card pad"><h2 class="t">Constraints that do real work</h2><table><tr><th>Column(s)</th><th>Constraint</th><th>What it prevents</th></tr>
+      ${cons.map(([c, k, w]) => `<tr><td class="mono small">${c}</td><td class="small">${k}</td><td class="muted">${w}</td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">Money representation</h2><table><tr><th>Choice</th><th>Why</th></tr>
+      <tr><td>Integer cents (<span class="mono">bigint</span>)</td><td class="muted">No floating point anywhere money is stored or compared. Display formatting happens in the client.</td></tr>
+      <tr><td>Signed postings: debit +, credit −</td><td class="muted">A journal is valid iff its postings sum to zero; a trial balance is a single <span class="mono">SUM</span>.</td></tr>
+      <tr><td>Normalized balance by role</td><td class="muted">Customer deposits are liabilities (credit-normal), so their balance is <span class="mono">−raw_sum</span>. The UI never sees raw signs.</td></tr>
+      <tr><td>Stored running balance</td><td class="muted"><span class="mono">accounts.raw_sum_minor</span> is updated in the same transaction as the postings, so balance reads are O(1); it's re-derived from postings as a check.</td></tr></table>
+      <p class="faint small" style="margin:10px 0 0">${src("migrations/001_init.sql")} ${src("migrations/002_space_bank_account.sql")}</p></div>`;
+}
+
+const FLOWS = {
+  S1: { title: "Get paid (incoming ACH credit)",
+    states: [["received", "c-blue"], "→", ["completed", "c-green"]],
+    journals: [["Column posts the credit", "ach_in.credit", "Cash at bank", "Deposit", "yes"]],
+    lanes: ["Column", "API", "Postgres"],
+    msgs: [[0, 1, "webhook: incoming credit"], [1, 0, "GET transfer (webhook is only a hint)", "blue"], [0, 1, "transfer, settled"], [1, 2, "insert bank_transaction (unique id)"], [1, 2, "post ach_in.credit"]],
+    notes: "Payroll is the one flow that starts at the bank. Recording the same bank transaction twice is a no-op because of the unique (provider, provider_txn_id).", tests: ["test_s1_payroll_lands_in_the_account"] },
+  S2: { title: "Add money (we originate an ACH debit)",
+    states: [["pending", "c-grey"], "→", ["processing", "c-blue"], "→", ["settled", "c-green"], "→", ["available", "c-green"], "  or  ", ["returned before settling", "c-red"]],
+    journals: [["Column accepts the debit", "ach_debit.accept", "ACH debits in flight", "Deposit", "no"], ["Cash arrives (settled_at)", "ach_debit.settle", "Cash at bank", "ACH debits in flight", "yes"], ["Hold period ends", "— (restriction released)", "—", "—", "no"], ["Returned before settling", "ach_debit.accept_reversal", "Deposit", "ACH debits in flight", "no"]],
+    lanes: ["App", "API", "Postgres", "Column"],
+    msgs: [[0, 1, "POST /pulls (Idempotency-Key)"], [1, 2, "transfer + authorization event"], [1, 3, "create ACH DEBIT (key = transfer id)"], [3, 1, "200 · initiated"], [1, 2, "post accept · create restriction"], [3, 1, "later: settled", "blue"], [1, 2, "post settle · release_at = settled + hold"], [2, 2, "clock: restriction released", "amber"]],
+    notes: "The customer's balance goes up when the bank accepts the debit, but a restriction of the same amount keeps available unchanged until the money settles and the hold period passes. Column confirmed: pulled debits sit in pending_amount until settlement.", tests: ["test_s2_pulled_money_is_restricted_until_settled_and_released", "test_debit_cash_arrives_only_at_settlement", "test_pull_returned_while_restricted_costs_nothing"] },
+  S3: { title: "Pay a friend (ledger only)",
+    states: [["completed", "c-green"]],
+    journals: [["Send", "p2p.transfer", "Deposit · payer", "Deposit · payee", "no"]],
+    lanes: ["App", "API", "Postgres"],
+    msgs: [[0, 1, "POST /p2p (Idempotency-Key)"], [1, 2, "claim idempotency key"], [1, 2, "lock both accounts (id order)"], [1, 2, "read available after lock · check"], [1, 2, "post p2p.transfer · save response"], [1, 0, "201"]],
+    notes: "No bank involved, so it completes in one transaction. Both accounts are locked in id order, which is why two people paying each other at the same time can't deadlock.", tests: ["test_s3_p2p_moves_money_instantly", "test_concurrent_withdrawals_never_overdraw"] },
+  S4: { title: "Withdraw (we originate an ACH credit), with a lost response",
+    states: [["held", "c-amber"], "→", ["unknown", "c-amber"], "→", ["processing", "c-blue"], "→", ["settled", "c-green"], "  or  ", ["manual_review", "c-red"]],
+    journals: [["Request", "— (hold placed)", "—", "—", "no"], ["Column accepts", "ach_credit.accept", "Deposit", "ACH credits in flight", "no"], ["Cash leaves (Column: at initiation)", "ach_credit.cash_out", "ACH credits in flight", "Cash at bank", "yes"], ["Returned by receiving bank", "ach_credit.return", "Cash at bank", "Deposit", "yes"]],
+    lanes: ["App", "API", "Postgres", "Column"],
+    msgs: [[0, 1, "POST /withdrawals (Idempotency-Key)"], [1, 2, "lock · check available · hold"], [1, 3, "create ACH CREDIT (key = transfer id)"], [3, 1, "✕ response lost (timeout)", "amber"], [1, 2, "status = unknown · hold stays"], [1, 3, "retry: same key, same body"], [3, 1, "200 · the existing transfer"], [1, 2, "post accept + cash_out · consume hold"], [1, 0, "Processing"]],
+    notes: "The bank call sits between two transactions. If the answer is lost we don't know whether Column created the transfer, so the money stays held until a retry with the same key returns the original. If Column ever returns a transfer that doesn't match our request, it goes to manual review instead of being guessed at.", tests: ["test_s4_withdrawal_holds_then_cash_leaves", "test_s4_drill_bank_outcome_unknown_is_recovered_without_paying_twice", "test_credit_cash_leaves_at_initiation"] },
+  S5: { title: "Chargeback after the money was spent",
+    states: [["available", "c-green"], "→", ["returned (R10)", "c-red"], "→", ["negative · frozen", "c-red"], "→", ["write-off requested", "c-amber"], "→", ["approved by 2nd person", "c-green"]],
+    journals: [["Return arrives", "ach_debit.return", "Deposit", "Cash at bank", "yes"], ["Write-off approved", "ach_debit.write_off", "Return losses", "Deposit", "no"]],
+    lanes: ["Column", "API", "Postgres", "Ops"],
+    msgs: [[0, 1, "webhook: returned"], [1, 0, "GET transfer", "blue"], [1, 2, "post return (may go negative)"], [2, 2, "balance < 0 → freeze spending", "red"], [3, 1, "request write-off"], [3, 1, "approve (different person)"], [1, 2, "post write_off · cash unchanged"]],
+    notes: "Only returns may push a customer below zero. The write-off moves the loss to an expense account and never touches cash. In the Column sandbox the unauthorized return (R29) arrives at the moment of settlement, while the restriction is still active, so the live run shows the restriction preventing the loss; the negative-balance path runs on the simulator with R10.", tests: ["test_s5_returned_pull_after_release_goes_negative_and_is_written_off", "test_write_off_needs_a_second_person", "test_debit_returned_after_settlement_takes_cash_back"] },
+};
+function engFlows() {
+  const k = S.flow || "S4", f = FLOWS[k];
+  return `<div class="card pad"><div class="tabs">${Object.keys(FLOWS).map(x => `<button class="${x === k ? "on" : ""}" onclick="S.flow='${x}';render()">${x}</button>`).join("")}</div>
+      <h2 class="t">${k} · ${f.title}</h2>${states(f.states)}<p class="muted" style="margin:14px 0 0">${f.notes}</p></div>
+    <div class="card pad"><h2 class="t">Journals at each step</h2><table><tr><th>Step</th><th>Effect</th><th>Debit</th><th>Credit</th><th>Needs bank txn</th></tr>
+      ${f.journals.map(([s, e, d, c, b]) => `<tr><td>${s}</td><td class="mono" style="color:var(--fern)">${e}</td><td>${d}</td><td>${c}</td><td>${b}</td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">Sequence</h2>${seqDiagram(f.lanes, f.msgs, f.title)}</div>
+    <div class="card pad"><h3 class="k" style="margin-top:0">Covered by</h3>${f.tests.map(t => `<div class="mono small" style="padding:3px 0">✓ ${t}</div>`).join("")}</div>`;
+}
+
+function engConsistency() {
+  const tx = [
+    ["request_withdrawal / send_p2p", "one transaction", "claim idempotency key → lock account rows (id order) → read balances → check → insert transfer, hold, event → store response"],
+    ["create_ach_transfer", "no transaction open", "HTTP call to Column with Idempotency-Key = transfer id. Holding a DB transaction across a network call would hold row locks for seconds."],
+    ["apply_snapshot", "one transaction", "lock transfer row → upsert bank transactions → derive every implied entry → ledger.post (skips existing) → update hold / restriction / status → event"],
+    ["handle_bank_event", "fetch, then one transaction", "dedupe by event id → GET transfer from Column → apply_snapshot → record event id"],
+  ];
+  const layers = [
+    ["API request", "(space, principal, operation, Idempotency-Key)", "Same body: the stored response is returned. Different body: 422. In progress: the duplicate waits on the row lock, then replays.", "platform/idempotency.py"],
+    ["Bank request", "transfer id as Column's Idempotency-Key", "Retries return the original transfer. If Column returns a transfer that doesn't match our body: BankConflict → manual review.", "column.py"],
+    ["Bank event", "(provider, event_id)", "Duplicate webhooks are acknowledged without work. Recorded only after being applied.", "payments.handle_bank_event"],
+    ["Accounting effect", "journals.dedupe_key = {transfer}:{effect}", "Posting an effect twice is a no-op; the same key with different content raises LedgerConflict (an alert, never expected).", "ledger.post"],
+  ];
+  return `<div class="card pad"><h2 class="t">The core idea</h2>
+      <p style="margin:0 0 10px">Inputs arrive <b>at least once</b> and in any order: client retries, webhook redeliveries, our own recovery job. Effects must happen <b>exactly once</b>. Fern gets there by making every write a function of state rather than of the message:</p>
+      ${codeBlock(`entries = everything_implied_by(bank_snapshot)   # accept, cash_out, return ...\nledger.post(entries)                            # posts only the ones it doesn't have`)}
+      <p class="muted small" style="margin:0">So applying the same snapshot twice, or an older snapshot after a newer one, cannot change the books. See ${L("code", "Code walkthrough")}.</p></div>
+    <div class="card pad"><h2 class="t">Transaction boundaries</h2><table><tr><th>Operation</th><th>Scope</th><th>Inside</th></tr>
+      ${tx.map(([o, s, i]) => `<tr><td class="mono small">${o}</td><td>${s}</td><td class="muted">${i}</td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">Locking</h2><table><tr><th>Rule</th><th>Why</th></tr>
+      <tr><td>Lock account rows with <span class="mono">SELECT … FOR UPDATE</span> before reading balances</td><td class="muted">The available-balance check and the hold/journal commit together; two requests can't both pass the check.</td></tr>
+      <tr><td>Always in account-id order, in one statement</td><td class="muted">A P2P from A→B and B→A at the same time takes the locks in the same order, so it can't deadlock.</td></tr>
+      <tr><td>Transfer row before account rows</td><td class="muted">One global order across all code paths.</td></tr>
+      <tr><td>Deadlock (40P01) or serialization failure (40001): retry the whole transaction, up to 3 times</td><td class="muted">Defensive: the lock order makes deadlocks unexpected, but a retry is cheap and correct because the transaction is idempotent.</td></tr>
+      <tr><td>Isolation: READ COMMITTED + explicit row locks</td><td class="muted">SERIALIZABLE would also be correct, but on a hot account it turns contention into aborted transactions and retries. Explicit locks make the waiting visible and bounded. Trade-off in ${L("decisions", "Decisions")}.</td></tr></table></div>
+    <div class="card pad"><h2 class="t">Four idempotency layers</h2><table><tr><th>Layer</th><th>Key</th><th>Behaviour</th><th>Where</th></tr>
+      ${layers.map(([l, k, b, w]) => `<tr><td><b style="font-weight:600">${l}</b></td><td class="mono small">${k}</td><td class="muted">${b}</td><td>${src(w)}</td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">Source of truth</h2><table><tr><th>Question</th><th>Answer</th></tr>
+      <tr><td>What does the customer have?</td><td class="muted">Our ledger: deposit balance − active holds − active restrictions.</td></tr>
+      <tr><td>Did cash actually move?</td><td class="muted">Column. Our cash account only changes with a Column transaction behind it, and reconciliation compares the two.</td></tr>
+      <tr><td>What state is a transfer in?</td><td class="muted">Column's transfer object, re-fetched on every webhook. Our status is derived from it.</td></tr></table></div>`;
+}
+
+function engFailures() {
+  const rows = [
+    ["Column accepts a withdrawal, the response is lost", "Transfer → unknown, money stays held; recovery retries with the same key and gets the original transfer", "unknown-age alert (P1 at 2 min)", "test_s4_drill…[drop_response]"],
+    ["Column 5xx / 503 before processing", "Same as above: we can't tell, so it's unknown", "bank error-rate alert", "test_s4_drill…[unavailable]"],
+    ["Column 429", "Not processed: client retries with backoff, same key, honouring Retry-After", "bank call log", "column._request"],
+    ["Same key, different body (Column returns the original)", "Detected by comparing amount and type → manual review, hold stays", "manual_review queue", "column.create_ach_transfer"],
+    ["Webhook delivered twice", "Event id inbox; even without it, re-fetch + dedupe keys make it a no-op", "webhook log: duplicate", "test_duplicate_and_out_of_order…"],
+    ["Webhooks out of order", "We apply the transfer's current state, never the event's", "—", "test_duplicate_and_out_of_order…"],
+    ["Webhook never arrives", "Reconciliation pulls Column's transactions independently; recovery job re-fetches in-flight transfers", "recon exception", "Reconciliation (ops)"],
+    ["Process dies between the bank call and the DB write", "Transfer is still held/unknown; the recovery job retries with the same key", "unknown-age alert", "same path as lost response"],
+    ["Process dies after apply, before recording the webhook", "Redelivery re-applies; the ledger skips existing entries", "—", "by construction"],
+    ["Two requests spend the same balance", "Row lock + check inside the transaction; one waits, then fails the check", "—", "test_concurrent_withdrawals_never_overdraw"],
+    ["Client retries a POST", "Stored response replayed; different body → 422", "—", "test_idempotent_replay_and_key_reuse"],
+    ["Pull returned before settlement", "accept_reversal, no cash entry, restriction ends", "—", "test_debit_returned_before_settlement… / test_pull_returned_while_restricted…"],
+    ["Pull returned after the money was spent", "Balance may go negative (only returns may), spending frozen, two-person write-off", "account_negative event", "test_s5…, test_write_off_needs_a_second_person"],
+    ["Column adds a status we don't know", "Mapping raises instead of guessing", "error log", "test_completed_counts_as_settled_and_unknown_status_is_loud"],
+    ["A bank transaction we can't explain", "Reconciliation exception, escalated with the transaction id", "recon exception age", "Reconciliation (ops)"],
+    ["Database failover (RDS Multi-AZ)", "In-flight transactions abort; clients and the recovery job retry safely because every step is idempotent", "5xx spike, then recovery", "author-run drill"],
+  ];
+  return `<div class="card pad"><h2 class="t">Failure modes</h2><p class="muted small" style="margin:0 0 12px">Everything I know can go wrong on the money path, what Fern does about it, how we'd notice, and what proves it.</p>
+    <table><tr><th style="width:24%">Failure</th><th>What Fern does</th><th>Detected by</th><th>Proven by</th></tr>
+    ${rows.map(([f, w, d, p]) => `<tr><td>${f}</td><td class="muted">${w}</td><td class="small">${d}</td><td class="mono small">${p}</td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">The rule behind most of these</h2><p style="margin:0">If we don't <i>know</i>, we don't move money. Unknown outcomes keep the hold; unexpected statuses raise; mismatched replies go to a person. Releasing money is only ever triggered by a definite answer from the bank or by a reviewed human decision.</p></div>`;
+}
+
+function engDecisions() {
+  const adrs = [
+    ["ADR-1", "Postgres is the ledger", "The money state and the business state (transfers, holds) must change in one atomic step.",
+      "Double-entry tables in the same Postgres as everything else.",
+      [["Dedicated ledger DB (e.g. TigerBeetle)", "Fast and purpose-built, but becomes a second source of truth; every transfer would need a cross-system protocol."], ["Event sourcing", "Great audit trail, but balances need projections and replays; more moving parts than five flows justify."]],
+      "One transaction does everything; the price is that ledger throughput is bounded by one Postgres primary (see Scaling)."],
+    ["ADR-2", "No queue on the money path", "Kinesis is in the target stack, but at-least-once delivery, per-shard ordering and no transaction with Postgres make it a poor fit for moving money.",
+      "Money moves through Postgres transactions only. A stream may be used later for fan-out (notifications, analytics) via an outbox.",
+      [["Kinesis/Kafka between API and bank worker", "Adds a second commit point and duplicate delivery to handle on the hottest path."]],
+      "Simpler failure analysis; async work is a recovery job reading Postgres."],
+    ["ADR-3", "Webhooks are hints", "Column signs webhooks but doesn't timestamp them, doesn't order them, and may redeliver.",
+      "On any webhook, re-fetch the transfer and apply its full state.",
+      [["Apply the webhook payload directly", "Breaks on reordering and replay; needs per-transfer sequencing."]],
+      "One extra GET per event; correctness no longer depends on delivery."],
+    ["ADR-4", "Unknown means held", "Timeouts and 5xx don't tell us whether the bank created the transfer.",
+      "Keep the money held; retry only with the same idempotency key; never auto-release on a timer.",
+      [["Release after a timeout", "Can pay out twice if the first attempt succeeded."], ["Retry with a new key", "Creates a second transfer."]],
+      "Customers occasionally see “confirming” for a few minutes; no duplicate payouts."],
+    ["ADR-5", "Derive entries from bank state", "Bank facts arrive in any order and may repeat.",
+      "Each time, compute every entry the bank's current state implies; the ledger skips existing ones by dedupe key.",
+      [["Incremental state machine (apply event N after N−1)", "Needs ordering guarantees we don't have."]],
+      "Order-insensitive and idempotent; the mapping is a pure, unit-tested function."],
+    ["ADR-6", "Explicit locks over SERIALIZABLE", "Overdraft prevention needs check-then-write atomicity.",
+      "READ COMMITTED, lock account rows in id order, retry on deadlock.",
+      [["SERIALIZABLE everywhere", "Correct, but hot accounts turn into abort/retry storms and failures surface far from the cause."]],
+      "Contention shows up as lock wait time, which we measure (see Load test)."],
+    ["ADR-7", "Holds separate from journals", "A withdrawal can fail before the bank accepts it.",
+      "Reserve with a hold; post journals only when the bank accepts.",
+      [["Debit the deposit immediately", "Every rejection needs a reversing journal and the books fill with noise."]],
+      "Available = balance − holds − restrictions; the ledger only records what really happened."],
+    ["ADR-8", "Restrict pulled money until settled + hold period", "ACH debits can be returned for days (R01) or up to 60 days if unauthorized (R10).",
+      "Credit on acceptance, restrict until settlement plus a hold period (10 demo minutes).",
+      [["Make it available immediately", "Best UX, but a return after spending becomes a loss."], ["Credit only at settlement", "Customers don't see incoming money at all for days."]],
+      "Losses are limited to returns that arrive after release, which S5 demonstrates."],
+    ["ADR-9", "Live for 72 hours, then archive", "A public demo needs to stay impressive after the interview window without ongoing cost or risk.",
+      "Run on EKS for a fixed window; afterwards serve a frozen snapshot, recordings and reports from static hosting.",
+      [["Run forever on small instances", "Ongoing cost, security exposure, and stale sandbox state."]],
+      "Live behaviour is time-boxed; the archive keeps the evidence."],
+  ];
+  return `<div class="card pad"><h2 class="t">Decisions</h2><p class="muted small" style="margin:0 0 12px">Each with the alternatives I rejected and what the choice costs.</p>
+    ${adrs.map(([id, t, ctx, dec, alts, cons]) => `<details class="adr"><summary><span class="mono faint">${id}</span> ${t}</summary>
+      <div class="adr-body"><p><b>Context.</b> ${ctx}</p><p><b>Decision.</b> ${dec}</p>
+      <table><tr><th>Alternative</th><th>Why not</th></tr>${alts.map(([a, w]) => `<tr><td>${a}</td><td class="muted">${w}</td></tr>`).join("")}</table>
+      <p style="margin-top:10px"><b>Consequence.</b> ${cons}</p></div></details>`).join("")}</div>`;
+}
+
+function engScaling() {
+  return `<div class="card pad"><h2 class="t">Where it stands</h2><table><tr><th>Dimension</th><th>Today</th><th>First thing to break</th></tr>
+      <tr><td>Write throughput</td><td class="muted">One Postgres primary; ~6 statements per money transaction</td><td class="muted">Primary CPU and WAL at sustained high write rates</td></tr>
+      <tr><td>Hot accounts</td><td class="muted">Every cash movement in a space updates its <span class="mono">bank</span> account row</td><td class="muted">Lock wait on that row; visible as withdrawal p99 under spike (${L("loadtest", "Load test")})</td></tr>
+      <tr><td>Connections</td><td class="muted">Pool of 20 per pod</td><td class="muted">Pool wait at ~800 req/s in the test</td></tr>
+      <tr><td>Journal volume</td><td class="muted">Two postings per effect, append-only</td><td class="muted">Index size and vacuum on postings after many millions of rows</td></tr>
+      <tr><td>Bank calls</td><td class="muted">Inline in the request, outside any transaction</td><td class="muted">Column latency and rate limits under bursts</td></tr></table></div>
+    <div class="card pad"><h2 class="t">What I'd change, in order</h2><table><tr><th>At</th><th>Change</th><th>Keeps</th></tr>
+      <tr><td class="mono">10×</td><td class="muted">PgBouncer in front of RDS; read replica for ops and engineering pages; move bank calls to a worker that drains a Postgres job table with <span class="mono">SKIP LOCKED</span></td><td class="muted">Single source of truth, same transactions</td></tr>
+      <tr><td class="mono">10×</td><td class="muted">Split the platform cash account into N sub-accounts chosen by hash, summed for reporting</td><td class="muted">Double-entry correctness; removes the hot row</td></tr>
+      <tr><td class="mono">100×</td><td class="muted">Partition journals and postings by month; archive closed periods</td><td class="muted">Invariants per partition</td></tr>
+      <tr><td class="mono">100×</td><td class="muted">Shard by customer (all of a customer's accounts on one shard); cross-shard P2P via a two-step transfer with a clearing account</td><td class="muted">Every single-customer operation stays one local transaction</td></tr>
+      <tr><td class="mono">any</td><td class="muted">Webhook ingest as a small Go service writing to the inbox table, if ingest latency ever matters</td><td class="muted">Processing still in the monolith</td></tr></table></div>
+    <div class="card pad"><h2 class="t">Known limitations of this demo</h2><ul class="muted" style="margin:0;padding-left:18px">
+      <li>Space isolation is enforced in application queries, not by Postgres row-level security.</li>
+      <li>Bank calls happen inline in the request; production would hand them to a worker.</li>
+      <li>No outbox/stream yet: the timeline is read from Postgres directly.</li>
+      <li>Crash-injection tests and a property-based reference model are designed but not yet automated.</li>
+      <li>The second approver for write-offs is simulated and labelled as such.</li></ul></div>`;
+}
+
+const ENDPOINTS = [
+  ["POST", "/spaces", "Create an isolated demo space and session", null, () => ({ space_id: "spc_7f3a…", customer_id: "cus_jordan", npc_customer_id: "cus_alex", token: "eyJ…" })],
+  ["GET", "/me", "Balances for everyone in the space", null, () => ({ customers: [{ display_name: "Jordan Rivera", balance_minor: norm("me"), available_minor: available(), held_minor: held(), restricted_minor: restricted() }, { display_name: "Alex", balance_minor: norm("alex") }] })],
+  ["POST", "/demo/payroll", "S1 · simulate an incoming payroll credit", { amount_minor: 200000 }, () => { flows.payroll(); return pub(S.transfers[0]); }],
+  ["POST", "/pulls", "S2 · pull money from the linked account", { amount_minor: 50000 }, () => { flows.pull(); return pub(S.transfers[0]); }],
+  ["POST", "/p2p", "S3 · send money to Alex", { to_customer_id: "cus_alex", amount_minor: 5000 }, () => { const n = S.transfers.length; flows.p2p(5000); return S.transfers.length > n ? pub(S.transfers[0]) : { error: "InsufficientFunds", status: 422 }; }],
+  ["POST", "/withdrawals", "S4 · withdraw; optional failure drill", { amount_minor: 10000, drill: "drop_response" }, () => { const n = S.transfers.length; flows.withdraw(10000, true); return S.transfers.length > n ? pub(S.transfers[0]) : { error: "InsufficientFunds", status: 422 }; }],
+  ["POST", "/transfers/recover-unknown", "Retry every unknown transfer with its original key", null, () => { const u = S.transfers.filter(t => t.status === "unknown"); u.forEach(flows.retry); return { retried: u.map(t => t.id) }; }],
+  ["GET", "/transfers/{id}", "One transfer with its timeline and journals", null, () => { const t = tById(S.selected) || S.transfers[0]; return t ? { transfer: pub(t), timeline: t.events.map(e => e.code), journals: S.journals.filter(j => j.tid === t.id).map(j => j.effect) } : { error: "NotFound", status: 404 }; }],
+  ["POST", "/write-offs/{id}/approve", "S5 · second-person approval", null, () => S.writeOff ? (S.writeOff.status === "pending" && flows.approveWriteOff(), S.writeOff) : { error: "NotFound", status: 404 }],
+  ["GET", "/ledger/trial-balance", "Every account and the invariants", null, () => ({ accounts: Object.keys(ACC).map(k => ({ role: k, balance_minor: norm(k) })), debits_equal_credits: checks()[0][1] })],
+];
+const pub = t => ({ id: t.id, kind: t.kind, status: t.status, amount_minor: t.amount, bank_transfer_id: t.bank && t.bank.id, return_code: t.returnCode || null });
+function engApi() {
+  const ep = ENDPOINTS.find(e => `${e[0]} ${e[1]}` === S.api) || ENDPOINTS[0];
+  const [m, path, desc, body] = ep;
+  const curl = `curl -X ${m} https://waken.dev/apps/fern/api${path} \\\n  -H "Authorization: Bearer $TOKEN"${m === "POST" ? ` \\\n  -H "Idempotency-Key: $(uuidgen)"` : ""}${body ? ` \\\n  -d '${JSON.stringify(body)}'` : ""}`;
+  const errors = [["400", "Validation error (amount ≤ 0, malformed id)", "no"], ["401", "Missing or invalid session token", "no"], ["404", "Not found in this space (other spaces look identical to missing)", "no"],
+    ["409", "Same Idempotency-Key still in progress", "yes, later"], ["422", "InsufficientFunds · IdempotencyKeyReused · business rule", "no (stored and replayed)"], ["429", "Rate limited", "yes, with backoff"], ["5xx", "Server error", "yes, same key"]];
+  return `<div class="card pad"><h2 class="t">Conventions</h2><table><tr><th>Topic</th><th>Rule</th></tr>
+      <tr><td>Auth</td><td class="muted">Bearer token from <span class="mono">POST /spaces</span>, HMAC-signed, bound to one space and one customer. The space never comes from the request body.</td></tr>
+      <tr><td>Money</td><td class="muted">Integer minor units (<span class="mono">amount_minor</span>), USD only.</td></tr>
+      <tr><td>Idempotency</td><td class="muted">Required on every money-moving POST. Replays return the original status and body, including errors; a different body under the same key is 422.</td></tr>
+      <tr><td>Async outcomes</td><td class="muted">Creating a withdrawal returns 201 with the transfer in <span class="mono">held</span>; the bank outcome shows up as <span class="mono">processing</span>, <span class="mono">unknown</span> or <span class="mono">failed</span> on <span class="mono">GET /transfers/{id}</span>.</td></tr>
+      <tr><td>Docs</td><td class="muted">OpenAPI at <span class="mono">/apps/fern/api/docs</span>, generated from the FastAPI models.</td></tr></table></div>
+    <div class="card pad"><h2 class="t">Endpoints</h2><div class="ep"><div class="ep-list">${ENDPOINTS.map(e => `<button class="${`${e[0]} ${e[1]}` === `${m} ${path}` ? "on" : ""}" onclick="S.api='${e[0]} ${e[1]}';S.apiResult=null;render()"><span class="method ${e[0]}">${e[0]}</span><span class="mono">${e[1]}</span></button>`).join("")}</div>
+      <div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="method ${m}" style="width:auto">${m}</span><span class="mono">${path}</span><span class="muted small">${desc}</span></div>
+        <h3 class="k">Request</h3><pre class="code">${esc(curl)}</pre>
+        <div style="display:flex;gap:8px;align-items:center"><button class="btn sm primary" onclick="act('tryApi')">Try it</button><span class="faint small">Runs against this demo space</span></div>
+        ${S.apiResult ? `<h3 class="k">Response</h3><pre class="code">${esc(JSON.stringify(S.apiResult, null, 2))}</pre>` : ""}</div></div></div>
+    <div class="card pad"><h2 class="t">Errors</h2><table><tr><th>Status</th><th>Meaning</th><th>Safe to retry</th></tr>${errors.map(([s, m2, r]) => `<tr><td class="mono">${s}</td><td class="muted">${m2}</td><td class="small">${r}</td></tr>`).join("")}</table></div>`;
+}
+const EFFECT_ROWS = [["ach_in.credit", "Cash at bank", "Deposit", "yes", "S1"], ["ach_debit.accept", "ACH debits in flight", "Deposit", "—", "S2"], ["ach_debit.settle", "Cash at bank", "ACH debits in flight", "yes", "S2"],
+  ["ach_debit.accept_reversal", "Deposit", "ACH debits in flight", "—", "S2 returned early"], ["ach_debit.return", "Deposit", "Cash at bank", "yes · may go negative", "S5"], ["ach_debit.write_off", "Return losses", "Deposit", "—", "S5"],
+  ["p2p.transfer", "Deposit (payer)", "Deposit (payee)", "—", "S3"], ["ach_credit.accept", "Deposit", "ACH credits in flight", "—", "S4"], ["ach_credit.cash_out", "ACH credits in flight", "Cash at bank", "yes", "S4"], ["ach_credit.return", "Cash at bank", "Deposit", "yes", "S4 returned"]];
+function engLedger() {
+  return `<div class="card pad"><h2 class="t">Invariants, live</h2>${checks().map(([n, ok, d]) => `<div class="check"><span class="ok ${ok ? "" : "bad"}">${ok ? "✓" : "!"}</span><div><div>${n}</div><div class="faint small">${d}</div></div></div>`).join("")}</div>
+    <div class="card pad"><h2 class="t">The same checks in SQL</h2>${codeBlock(String.raw`
+-- 1. Debits equal credits in every space
+SELECT space_id FROM accounts GROUP BY space_id HAVING sum(raw_sum_minor) <> 0;
+
+-- 2. Stored balances equal their postings
+SELECT a.id FROM accounts a LEFT JOIN postings p ON p.account_id = a.id
+GROUP BY a.id HAVING a.raw_sum_minor <> coalesce(sum(p.amount_minor), 0);
+
+-- 3. Every journal is exactly two postings that net to zero
+SELECT journal_id FROM postings GROUP BY journal_id
+HAVING count(*) <> 2 OR sum(amount_minor) <> 0;
+
+-- 4. Cash at bank equals the bank transactions behind it
+SELECT a.space_id FROM accounts a
+LEFT JOIN journals j ON j.bank_transaction_id IS NOT NULL AND (j.debit_account_id = a.id OR j.credit_account_id = a.id)
+LEFT JOIN bank_transactions b ON b.id = j.bank_transaction_id
+WHERE a.role = 'bank' GROUP BY a.space_id, a.raw_sum_minor
+HAVING a.raw_sum_minor <> coalesce(sum(b.amount_minor), 0);`, "every query must return zero rows")}</div>
+    <div class="card pad"><h2 class="t">Trial balance</h2>${trialBalance()}</div>
+    <div class="card pad"><h2 class="t">Effect templates</h2><p class="muted small" style="margin:0 0 10px">The only legal shapes. ${src("src/fern/ledger.py", "ledger.EFFECTS")}</p>
+      <table><tr><th>Effect</th><th>Debit</th><th>Credit</th><th>Bank transaction</th><th>Flow</th></tr>
+      ${EFFECT_ROWS.map(([e, d, c, b, f]) => `<tr><td class="mono" style="color:var(--fern)">${e}</td><td>${d}</td><td>${c}</td><td class="small">${b}</td><td class="mono small">${f}</td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">All journals</h2>${S.journals.length ? S.journals.slice().reverse().map(journalView).join("") : `<div class="empty">No journals yet. Run the scenarios in the customer app.</div>`}</div>`;
+}
+
+function engCode() {
+  const parts = [
+    ["Every accounting effect has exactly one legal shape", "src/fern/ledger.py · _post_one", String.raw`
+rule = EFFECTS.get(e.effect)
+debit, credit = accounts[e.debit_account_id], accounts[e.credit_account_id]
+if (debit["role"], credit["role"]) != (rule.debit_role, rule.credit_role):
+    raise LedgerError(f"{e.effect} must debit {rule.debit_role} and credit {rule.credit_role}")
+
+# Cash only moves with a bank transaction of the same amount and direction behind it.
+touches_bank = "bank" in (rule.debit_role, rule.credit_role)
+if touches_bank != (e.bank_transaction_id is not None):
+    raise LedgerError(f"{e.effect}: bank_transaction_id is {'required' if touches_bank else 'not allowed'}")
+...
+if debit["role"] == "customer_deposit" and not rule.may_go_negative:
+    if normalized("customer_deposit", debit["raw_sum_minor"]) < 0:
+        raise LedgerError(f"{e.effect} would make the customer balance negative")`,
+      "The ledger refuses anything that isn't one of ten known shapes, refuses cash entries without a matching bank transaction, and refuses to take a customer negative unless the effect is a return. Bugs elsewhere fail loudly here instead of corrupting the books."],
+    ["Bank state in, every implied entry out", "src/fern/payments.py · apply_snapshot (condensed)", String.raw`
+t = SELECT * FROM transfers WHERE id = %s FOR UPDATE          # one writer per transfer
+for x in snapshot.transactions:                                # cash moments from the bank
+    INSERT INTO bank_transactions ... ON CONFLICT DO NOTHING   # stable ids: "<transfer>:<kind>"
+
+entries = [Entry("ach_credit.accept", amount, deposit, pending, f"{tid}:ach_credit.accept", tid)]
+for x in snapshot.transactions:
+    if x.kind == "initiation":
+        entries.append(Entry("ach_credit.cash_out", amount, pending, bank, f"{tid}:ach_credit.cash_out", tid, x.id))
+    elif x.kind == "return":
+        entries.append(Entry("ach_credit.return", amount, bank, deposit, f"{tid}:ach_credit.return", tid, x.id))
+
+await ledger.post(c, space_id, entries)                        # skips keys it already has
+UPDATE holds SET status = 'consumed' WHERE transfer_id = %s AND status = 'active'`,
+      "This is why webhooks can repeat or arrive out of order: the function doesn't care what happened last time, only what the bank says now. Applying the same snapshot twice posts nothing new; an older snapshot implies a subset of what's already posted."],
+    ["Three ways a bank call can end", "src/fern/payments.py · submit_to_bank", String.raw`
+try:
+    snapshot = await bank.create_ach_transfer(idempotency_key=str(transfer_id), ...)
+except BankRejected:          # definitely not created
+    await transaction(conn, lambda c: _fail(c, t, reason))           # release the hold
+except BankOutcomeUnknown:    # timeout, connection error, 429 after retries, 5xx
+    await transaction(conn, lambda c: _mark_unknown(c, t, reason))   # hold stays
+except BankConflict:          # the bank returned a different transfer for our key
+    await transaction(conn, lambda c: _manual_review(c, t, reason))  # a person decides
+else:
+    await apply_snapshot(conn, bank.provider, space_id, transfer_id, snapshot)`,
+      "Only a definite rejection releases money. The idempotency key is the transfer id, so every retry, from any process, refers to the same bank transfer."],
+    ["When cash actually moves at Column", "src/fern/column.py · to_snapshot", String.raw`
+if direction == "credit":                      # we push money out
+    txns.append(BankTxn(f"{tid}:initiation", -amount, "initiation", initiated))
+    if coarse in ("returned", "canceled"):     # either way the money comes back
+        txns.append(BankTxn(f"{tid}:return", amount, "return", back_at))
+else:                                          # we pull money in
+    if settled:
+        txns.append(BankTxn(f"{tid}:settlement", amount, "settlement", settled))
+    if coarse == "returned" and settled:
+        txns.append(BankTxn(f"{tid}:return", -amount, "return", returned or settled))`,
+      "Verified against the sandbox with a probe script: pushed credits leave the available balance at creation; pulled debits sit in pending until settlement. Statuses we don't recognise raise instead of being guessed. Pure function, six unit tests."],
+    ["Retrying the bank safely", "src/fern/column.py · _request", String.raw`
+for attempt in range(5):
+    try:
+        r = await self._http.request(method, path, json=json, headers=headers)
+    except (httpx.TimeoutException, httpx.TransportError) as e:
+        raise BankOutcomeUnknown(f"{method} {path}: {type(e).__name__}") from e
+    # Rate limited: the request was not processed, so retrying (same idempotency key) is safe.
+    if r.status_code != 429 or attempt == 4:
+        break
+    await asyncio.sleep(float(r.headers.get("Retry-After") or 2**attempt))
+if r.status_code == 429 or r.status_code >= 500:
+    raise BankOutcomeUnknown(f"{method} {path}: HTTP {r.status_code}")
+if r.status_code >= 400:
+    raise BankRejected(f"{method} {path}: HTTP {r.status_code}")`,
+      "429 is the only response retried inline, because it's the only one that guarantees nothing happened. Everything ambiguous becomes BankOutcomeUnknown and goes through the recovery path."],
+  ];
+  return parts.map(([t, f, code, why], i) => `<div class="card pad"><h2 class="t">${i + 1}. ${t}</h2>${codeBlock(code, f)}<div class="anno">${why}</div></div>`).join("");
+}
+
+function engTesting() {
+  const groups = [
+    ["Scenarios", "Postgres + simulated bank", [["test_s1_payroll_lands_in_the_account", "Payroll posts once; cash = $2,000"], ["test_s2_pulled_money_is_restricted_until_settled_and_released", "Balance up, available unchanged until settle + hold"], ["test_s3_p2p_moves_money_instantly", "Both balances, books balanced"], ["test_s4_withdrawal_holds_then_cash_leaves", "Hold → accept + cash_out; pending account back to 0"], ["test_s5_returned_pull_after_release_goes_negative_and_is_written_off", "The full §5.3 example: −$300, frozen, written off, cash = sum of 4 bank transactions"]]],
+    ["Failures", "Postgres + simulated bank", [["test_s4_drill_bank_outcome_unknown_is_recovered_without_paying_twice ×2", "drop_response and unavailable: one bank transfer, one set of journals"], ["test_duplicate_and_out_of_order_webhooks_post_once", "Every event ×10, shuffled"], ["test_concurrent_withdrawals_never_overdraw", "50 concurrent $10 withdrawals from $100: exactly 10 succeed"], ["test_idempotent_replay_and_key_reuse", "Replay = same response; different body = rejected"], ["test_insufficient_funds_is_stored_for_replay", "Errors replay too"], ["test_pull_returned_while_restricted_costs_nothing", "Restriction prevents the loss"], ["test_write_off_needs_a_second_person", "Requester can't approve"], ["test_ledger_rejects_cash_without_a_matching_bank_transaction", "Ledger guard"], ["test_ledger_rejects_wrong_accounts_and_other_spaces", "Shape guard and space isolation"]]],
+    ["Column mapping", "pure functions", [["test_credit_cash_leaves_at_initiation", ""], ["test_credit_returned_brings_cash_back", ""], ["test_debit_cash_arrives_only_at_settlement", ""], ["test_debit_returned_after_settlement_takes_cash_back", ""], ["test_debit_returned_before_settlement_moves_no_cash", ""], ["test_completed_counts_as_settled_and_unknown_status_is_loud", ""]]],
+    ["HTTP", "FastAPI + Postgres", [["test_all_five_cases_over_http", "S1–S5 through the API, including the drill"], ["test_requests_need_a_session", "401 without or with a forged token"]]],
+    ["Live sandbox", "opt-in, real Column", [["test_five_cases_on_column_sandbox", "Runs the five cases against Column; creates sandbox objects"]]],
+  ];
+  const probe = [
+    ["Pulled debit", "Sits in pending_amount; becomes available at settlement", "Cash entry for a pull at settled_at"],
+    ["Pushed credit", "Leaves available_amount immediately at creation", "Cash entry for a withdrawal at initiation"],
+    ["Same key, different body", "Column returns the original transfer, no error", "Compare amount and type → BankConflict → manual review"],
+    ["RETURN_UNAUTH (R29)", "Arrives at the moment of settlement (settled_at = returned_at)", "Live S5 shows the restriction preventing loss; R10-after-release runs on the simulator"],
+    ["Simulated incoming credit", "Waits for the next Fed window unless force-settled; ~2 min to appear", "Pre-fund pooled accounts before the live window"],
+  ];
+  return `<div class="card pad"><h2 class="t">Strategy</h2><table><tr><th>Layer</th><th>What it proves</th><th>Runs</th></tr>
+      <tr><td>Pure mapping tests</td><td class="muted">Column's statuses and timestamps become the right cash moments</td><td class="small">every push</td></tr>
+      <tr><td>Scenario and failure tests</td><td class="muted">Real Postgres, simulated bank with fault injection; assert balances and invariants after every test</td><td class="small">every push (Postgres service in CI)</td></tr>
+      <tr><td>HTTP tests</td><td class="muted">The API contract, sessions, idempotency headers</td><td class="small">every push</td></tr>
+      <tr><td>Contract probe</td><td class="muted">What Column actually does, written down and turned into code</td><td class="small">${src("scripts/column_probe.py")} by hand</td></tr>
+      <tr><td>Live sandbox test</td><td class="muted">The five cases end to end on Column</td><td class="small">opt-in (<span class="mono">FERN_RUN_COLUMN=1</span>)</td></tr>
+      <tr><td>Load test + reference model</td><td class="muted">Speed, and that the books match a pure model of the accepted requests</td><td class="small">before the live window</td></tr></table></div>
+    <div class="card pad"><h2 class="t">The tests</h2>${groups.map(([g, env, ts]) => `<h3 class="k">${g} · <span style="text-transform:none;letter-spacing:0">${env}</span></h3>
+      <table>${ts.map(([n, w]) => `<tr><td class="mono small" style="width:55%">${n}</td><td class="muted small">${w}</td></tr>`).join("")}</table>`).join("")}
+      <p class="faint small" style="margin:12px 0 0">24 tests in ${src("tests/")}. CI: gitleaks → ruff → pytest against Postgres 16 ${src(".github/workflows/ci.yml")}.</p></div>
+    <div class="card pad"><h2 class="t">Verified against the Column sandbox</h2><table><tr><th>Behaviour</th><th>What Column did</th><th>What the code does about it</th></tr>
+      ${probe.map(([b, w, c]) => `<tr><td>${b}</td><td class="muted">${w}</td><td class="muted">${c}</td></tr>`).join("")}</table></div>`;
+}
+
+function engInfra() {
+  const phases = [["H0–H4", "Warm up", "Terraform apply, migrate, open account pool, pre-fund, smoke tests. Fail → stay on static preview."], ["H4–H68", "Live", "Interactive during staffed hours; outside them new money movement pauses, bank events keep processing."], ["H68–H71", "Drain", "No new spaces; finish in-flight work; final reconciliation; export snapshot; AI run report."], ["H71–H72", "Archive", "Worker routes to the static archive; terraform destroy; check for leftovers."]];
+  const cost = [["EKS control plane", "~$7"], ["3 × t4g.medium on-demand", "~$7"], ["RDS db.t4g.small Multi-AZ", "~$6"], ["Redis, ALB, public IPv4, logs", "~$8"], ["Per 72-hour run", "≈ $25–35"]];
+  return `<div class="card pad"><h2 class="t">Topology</h2>
+      <div class="arch flow"><div class="node"><b>Cloudflare</b>DNS for waken.dev, Worker routes /apps/fern, WAF, rate limits</div><div class="node"><b>ALB</b>ACM cert, accepts only requests carrying the Worker's origin secret</div>
+        <div class="node money"><b>EKS</b>api ×2 · worker ×1 · web ×1 · prometheus/grafana; public subnets, no NAT</div><div class="node money"><b>RDS PostgreSQL 16</b>Multi-AZ, private subnet, PITR 7 days</div></div>
+      <div class="arch" style="grid-template-columns:repeat(3,1fr)"><div class="node"><b>Secrets Manager</b>Column, Plaid, Claude keys via External Secrets; nothing in the repo</div><div class="node"><b>ECR + Argo CD</b>GitHub Actions builds ARM images; Argo CD syncs Helm charts</div><div class="node"><b>GitHub Pages</b>The blog, and Fern's static archive after the window</div></div></div>
+    <div class="card pad"><h2 class="t">CI/CD</h2>${states([["push", "c-grey"], "→", ["gitleaks", "c-grey"], "→", ["ruff", "c-grey"], "→", ["pytest + Postgres", "c-blue"], "→", ["build ARM image", "c-grey"], "→", ["ECR", "c-grey"], "→", ["Argo CD sync", "c-green"]])}
+      <p class="muted small" style="margin:12px 0 0">Migrations are plain SQL files applied in order by a migration job before the new pods roll out; each is backwards-compatible with the previous release.</p></div>
+    <div class="card pad"><h2 class="t">The 72-hour window</h2><table><tr><th>When</th><th>Phase</th><th>What happens</th></tr>${phases.map(([w, p, d]) => `<tr><td class="mono">${w}</td><td>${p}</td><td class="muted">${d}</td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">Cost</h2><table><tr><th>Item</th><th class="num">72 hours</th></tr>${cost.map(([i, c], k) => `<tr><td${k === cost.length - 1 ? ' style="font-weight:600"' : ""}>${i}</td><td class="num">${c}</td></tr>`).join("")}</table>
+      <p class="faint small" style="margin:10px 0 0">Estimates at us-west-2 on-demand prices; AI spend has its own hard cap.</p></div>`;
+}
+
+function engBank() {
+  const unknown = S.transfers.filter(t => t.status === "unknown").length;
+  const dup = S.webhooks.filter(w => w.result === "duplicate").length, ooo = S.webhooks.filter(w => w.flags === "out of order").length;
+  const r = rng(11), lat = Array.from({ length: 30 }, (_, i) => Math.round(150 + r() * 70 + (i === 21 ? 260 : 0)));
+  const mapping = [["PRE_REVIEW · INITIATED · HOLD · PENDING_SUBMISSION · SUBMITTED · SCHEDULED · MANUAL_REVIEW(_APPROVED)", "initiated", "processing"], ["SETTLED · COMPLETED · RETURN_DISHONORED(_FUNDS_UNLOCKED)", "settled", "settled"], ["RETURNED · RETURN_CONTESTED", "returned", "returned"], ["CANCELED", "canceled", "canceled"], ["anything else", "raise", "—"]];
+  const errs = [["Timeout / connection error", "BankOutcomeUnknown", "hold stays; recovery retries same key"], ["429", "retry inline with Retry-After (max 5), then BankOutcomeUnknown", "safe: not processed"], ["5xx", "BankOutcomeUnknown", "hold stays"], ["other 4xx", "BankRejected", "release hold, transfer failed"], ["200 but different transfer for our key", "BankConflict", "manual review"]];
+  return `<div class="grid g4">
+      <div class="card stat good"><div class="lbl">Column sandbox</div><div class="val">Up</div><div class="sub">last call 200 · TLS ok</div></div>
+      <div class="card stat"><div class="lbl">Bank API calls</div><div class="val">${S.bankCalls.length}</div><div class="sub">${S.bankCalls.filter(c => c.status === "timeout").length} timed out</div></div>
+      <div class="card stat"><div class="lbl">Webhooks received</div><div class="val">${S.webhooks.length}</div><div class="sub">${dup} duplicate · ${ooo} out of order</div></div>
+      <div class="card stat ${unknown ? "warn" : "good"}"><div class="lbl">Unknown outcomes</div><div class="val">${unknown}</div><div class="sub">money held until confirmed</div></div></div>
+    <div class="card pad"><h2 class="t">Status mapping</h2><p class="muted small" style="margin:0 0 10px">Column's statuses collapse to four coarse states; cash moments come from timestamps, not statuses. ${src("src/fern/column.py", "column.to_snapshot")}</p>
+      <table><tr><th>Column status</th><th>Snapshot</th><th>Our transfer</th></tr>${mapping.map(([c, s, o]) => `<tr><td class="mono small">${c}</td><td class="mono">${s}</td><td>${o}</td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">Error classification</h2><table><tr><th>Response</th><th>Becomes</th><th>Effect on money</th></tr>${errs.map(([a, b, c]) => `<tr><td>${a}</td><td class="mono small">${b}</td><td class="muted">${c}</td></tr>`).join("")}</table></div>
+    <div class="card pad">${lineChart("banklat", { title: "Column API latency, p95 (ms)", labels: lat.map((_, i) => `-${30 - i}m`), unit: "minute", fmtv: v => `${Math.round(v)}`, series: [{ name: "p95", color: "var(--s2)", values: lat }] })}
+      <p class="faint small" style="margin:8px 0 0">Sample series in the prototype. Live: from the bank client's request histogram.</p></div>
+    <div class="card pad"><h2 class="t">Bank calls</h2>${S.bankCalls.length ? `<table><tr><th>When</th><th>Call</th><th>Result</th><th class="num">Latency</th><th>Note</th></tr>
+      ${S.bankCalls.map(c => `<tr><td class="mono faint">T+${c.clock}m</td><td class="mono">${c.method} ${c.path}</td><td>${c.status === 200 ? `<span class="chip c-green">200</span>` : `<span class="chip c-amber">${c.status}</span>`}</td><td class="num">${c.ms >= 10000 ? "10.0 s" : c.ms + " ms"}</td><td class="muted small">${c.note}</td></tr>`).join("")}</table>` : `<div class="empty">No bank calls yet. Run the scenarios in the customer app.</div>`}</div>
+    <div class="card pad"><h2 class="t">Webhook deliveries</h2><p class="muted small" style="margin:0 0 12px">Signed with HMAC-SHA256 over the raw body (<span class="mono">Column-Signature</span>), verified before anything else. No timestamp in the signature, so replays are possible: that's fine, because a webhook only triggers a re-fetch.</p>
+      ${S.webhooks.length ? `<table><tr><th>When</th><th>Event</th><th>Type</th><th>Transfer</th><th>Result</th></tr>
+      ${S.webhooks.map(w => `<tr><td class="mono faint">T+${w.clock}m</td><td class="mono">${w.id}</td><td class="mono small">${w.type}</td><td class="mono faint">${w.ref}</td><td>${w.result === "duplicate" ? `<span class="chip c-grey">duplicate · ignored</span>` : `<span class="chip c-green">applied</span>`}${w.flags === "out of order" ? ` <span class="chip c-amber">out of order</span>` : ""}</td></tr>`).join("")}</table>` : `<div class="empty">No webhooks yet.</div>`}</div>`;
+}
+
+function engMonitoring() {
+  const r = rng(7), N = 60, lab = Array.from({ length: N }, (_, i) => `-${N - i}m`);
+  const spike = i => i >= 40 && i <= 43;
+  const p50 = lab.map((_, i) => 14 + r() * 5 + (spike(i) ? 6 : 0)), p95 = lab.map((_, i) => 34 + r() * 12 + (spike(i) ? 70 : 0)), p99 = lab.map((_, i) => 70 + r() * 25 + (spike(i) ? 190 : 0));
+  const rps = lab.map((_, i) => 9 + Math.sin(i / 8) * 3 + r() * 2), err = lab.map((_, i) => spike(i) ? 0.3 + r() * 0.2 : r() * 0.03);
+  const q = lab.map((_, i) => Math.round(spike(i) ? 6 + r() * 4 : r() * 1.4));
+  const slos = [["API availability", "99.5% of requests non-5xx", "100%", "good"], ["API latency", "p95 < 200 ms", "41 ms", "good"], ["Unknown outcomes resolved", "< 5 min each", "3 min max", "good"], ["Webhook processing lag", "p95 < 30 s", "4 s", "good"], ["Recon exceptions closed", "< 1 hour", "open: 0", "good"], ["Unbalanced journals", "always 0", "0", "good"]];
+  const alerts = [["Resolved", "P2", "Bank error rate > 1% for 2 min", "−20m", "Column returned 503 during the drill; retries succeeded, no money moved twice.", "bank-errors.md"],
+    ["Resolved", "P1", "Transfer unknown for > 2 min", "−19m", "Recovered by same-key retry.", "unknown-outcome.md"],
+    ["OK", "P1", "Ledger invariant violated", "—", "Never fired.", "ledger-invariant.md"], ["OK", "P1", "Transfer in manual_review", "—", "", "bank-conflict.md"],
+    ["OK", "P2", "Reconciliation exception older than 10 min", "—", "", "recon-exception.md"], ["OK", "P3", "AI spend > 80% of budget", "—", "", "ai-budget.md"]];
+  return `<div class="sample">◆ Sample data. In the live demo these come from Prometheus; this prototype shows the layout with representative numbers.</div>
+    <div class="card pad"><h2 class="t">SLOs</h2><p class="muted small" style="margin:0 0 10px">Two kinds: service health, and money health. The second kind has no error budget.</p>
+      <table><tr><th>Objective</th><th>Target</th><th>Current</th><th></th></tr>${slos.map(([o, t, c, s]) => `<tr><td>${o}</td><td class="muted">${t}</td><td class="mono">${c}</td><td><span class="chip c-green">met</span></td></tr>`).join("")}</table></div>
+    <div class="grid g6">${[["Uptime (24h)", "100%", "good"], ["API p95", "41 ms", ""], ["5xx rate", "0.02%", "good"], ["Requests/s", "11.4", ""], ["Unknown transfers", String(S.transfers.filter(t => t.status === "unknown").length), ""], ["Open recon exceptions", String(S.exceptions.filter(e => e.status === "open").length), ""]]
+      .map(([l, v, c]) => `<div class="card stat ${c}"><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join("")}</div>
+    <div class="card pad">${lineChart("lat", { title: "API latency (ms)", labels: lab, unit: "minute", fmtv: v => `${Math.round(v)}`, height: 210, series: [{ name: "p50", color: "var(--s1)", values: p50 }, { name: "p95", color: "var(--s2)", values: p95 }, { name: "p99", color: "var(--s3)", values: p99 }] })}
+      <p class="faint small" style="margin:8px 0 0">The bump at −20m is the “bank unavailable” drill. See ${L("incidents", "Incident review")}.</p></div>
+    <div class="grid g3">
+      <div class="card pad">${lineChart("rps", { title: "Requests per second", labels: lab, unit: "minute", fmtv: v => v.toFixed(0), height: 230, width: 360, series: [{ name: "req/s", color: "var(--s1)", values: rps }] })}</div>
+      <div class="card pad">${lineChart("err", { title: "5xx rate (%)", labels: lab, unit: "minute", fmtv: v => v.toFixed(2), height: 230, width: 360, series: [{ name: "5xx %", color: "var(--s3)", values: err }] })}</div>
+      <div class="card pad">${lineChart("q", { title: "Transfers awaiting the bank", labels: lab, unit: "minute", fmtv: v => v.toFixed(0), height: 230, width: 360, series: [{ name: "transfers", color: "var(--s2)", values: q }] })}</div></div>
+    <div class="card pad"><h2 class="t">Alert rules</h2><table><tr><th>State</th><th>Sev</th><th>Rule</th><th>Last fired</th><th>Notes</th><th>Runbook</th></tr>
+      ${alerts.map(([s, sev, rule, at, n, rb]) => `<tr><td>${s === "OK" ? `<span class="chip c-green">OK</span>` : `<span class="chip c-blue">resolved</span>`}</td><td class="mono">${sev}</td><td>${rule}</td><td class="mono faint">${at}</td><td class="muted small">${n}</td><td class="mono small">${rb}</td></tr>`).join("")}</table></div>
+    <div class="card pad"><h2 class="t">Metrics the app exports</h2>${codeBlock(String.raw`
+fern_http_request_duration_seconds{route, method, status}     # histogram
+fern_bank_call_duration_seconds{provider, operation, outcome}  # outcome: ok | rejected | unknown | conflict
+fern_transfers{kind, status}                                   # gauge, includes unknown and manual_review
+fern_transfer_unknown_age_seconds                              # oldest unknown transfer
+fern_webhook_events_total{provider, result}                    # applied | duplicate | unknown_transfer
+fern_recon_exceptions{status}
+fern_ledger_invariant_ok{check}                                # 1 or 0, evaluated every minute`)}</div>`;
+}
+
+function engIncidents() {
+  const tl = [["T+20:00", "Withdrawal of $2,300 requested; hold placed", "api"], ["T+20:00", "Create ACH credit sent to Column with key = transfer id", "bank"], ["T+20:10", "No response within 10 s; transfer marked unknown; money still held", "bank"], ["T+22:10", "Alert: transfer unknown for > 2 min (P1)", "ops"], ["T+22:30", "Recovery job retries with the same key; Column returns the existing transfer", "api"], ["T+22:31", "accept + cash_out posted; hold consumed; status processing", "api"], ["T+22:35", "Reconciliation: 0 open exceptions; invariants OK", "ops"]];
+  return `<div class="card pad"><h2 class="t">INC-001 · Withdrawal outcome unknown after bank timeout</h2>
+      <div class="grid g4" style="margin-bottom:12px">${[["Severity", "P1 (drill)"], ["Duration", "2 min 31 s"], ["Customer impact", "“Confirming” status"], ["Money impact", "$0 · no duplicate"]].map(([l, v]) => `<div class="card stat"><div class="lbl">${l}</div><div class="val" style="font-size:22px">${v}</div></div>`).join("")}</div>
+      <p class="muted" style="margin:0">Written from a failure drill, in the same format a real incident would use. Blameless; the point is what the system and process did.</p></div>
+    <div class="card pad"><h2 class="t">Timeline</h2><ul class="tl">${tl.map(([t, e, s]) => `<li><span class="code">${t}</span><span class="src ${s}">${s}</span><span>${e}</span></li>`).join("")}</ul></div>
+    <div class="card pad"><h2 class="t">Analysis</h2><table><tr><th style="width:24%">Question</th><th>Answer</th></tr>
+      <tr><td>What happened</td><td class="muted">Column created the transfer, but its response didn't reach us (injected).</td></tr>
+      <tr><td>Why no money was lost</td><td class="muted">An ambiguous outcome never releases a hold, and the retry reused the idempotency key, so Column returned the original transfer instead of creating a second one.</td></tr>
+      <tr><td>How we noticed</td><td class="muted">The unknown-age alert, two minutes after the timeout.</td></tr>
+      <tr><td>What went well</td><td class="muted">No manual intervention needed; the books never disagreed with the bank.</td></tr>
+      <tr><td>What could be better</td><td class="muted">The recovery job ran ~20 s after the alert. The customer saw “Confirming” for 2.5 minutes without an estimate.</td></tr></table></div>
+    <div class="card pad"><h2 class="t">Action items</h2><table><tr><th>Action</th><th>Type</th><th>Status</th></tr>
+      <tr><td>Run the recovery job immediately on timeout (with jitter), not only on schedule</td><td class="muted">mitigate</td><td><span class="chip c-amber">open</span></td></tr>
+      <tr><td>Show “usually resolves within a few minutes” on unknown transfers</td><td class="muted">customer experience</td><td><span class="chip c-amber">open</span></td></tr>
+      <tr><td>Add a crash-injection test between bank call and DB write</td><td class="muted">prevent</td><td><span class="chip c-amber">open</span></td></tr></table></div>`;
+}
+
+function engLoadtest() {
+  const r = rng(3), N = 32, lab = Array.from({ length: N }, (_, i) => `${Math.floor(i / 2)}:${i % 2 ? "30" : "00"}`);
+  const target = i => i < 10 ? i * 40 : i < 26 ? 400 : i < 28 ? 800 : Math.max(0, 400 - (i - 28) * 130);
+  const rps = lab.map((_, i) => target(i) * (0.97 + r() * 0.04));
+  const p95 = lab.map((_, i) => { const t = target(i); return t >= 800 ? 180 + r() * 40 : 24 + t / 400 * 34 + r() * 6; });
+  const eps = [["GET /me", "read", 9, 21, 38], ["POST /p2p", "write", 14, 38, 71], ["POST /withdrawals", "write + bank", 22, 57, 112], ["POST /webhooks/column", "bank event", 6, 15, 29], ["GET /transfers/{id}", "read", 11, 26, 47]];
+  const asserts = [["Duplicate payouts", "0", "same transfer never sent to the bank twice"], ["Overdrafts", "0", "no customer spent more than available"], ["Unbalanced journals", "0", "every journal debits = credits"], ["Balances vs reference model", "0 diffs", "per customer and per account"], ["Injected recon mismatches found", "250 / 250", "all caught on the next run"], ["Unknown outcomes left unresolved", "0", "after recovery job"]];
+  return `<div class="sample">◆ Sample report. Layout and method are final; the numbers are placeholders until the k6 run on the live EKS environment.</div>
+    <div class="card pad"><h2 class="t">Setup</h2><div class="grid g3">
+      <div><h3 class="k" style="margin-top:0">Environment</h3><div class="muted small">EKS · 3 × t4g.medium (2 API pods, 1 worker)<br>RDS PostgreSQL 16 · db.t4g.small · Multi-AZ<br>Bank: deterministic simulator (no sandbox traffic)</div></div>
+      <div><h3 class="k" style="margin-top:0">Load profile</h3><div class="muted small">Ramp 0 → 400 req/s over 5 min<br>Hold 400 req/s for 8 min<br>Spike to 800 req/s for 1 min, then ramp down</div></div>
+      <div><h3 class="k" style="margin-top:0">Mix</h3><div class="muted small">55% reads · 25% P2P · 10% withdrawals (20% on one hot account) · 10% webhook bursts with 30% duplicates</div></div></div></div>
+    <div class="card pad"><h2 class="t">Method</h2>${codeBlock(String.raw`
+// k6: open-model arrival rate, so slow responses don't slow the load down
+export const options = {
+  scenarios: {
+    steady: { executor: "ramping-arrival-rate", startRate: 0, timeUnit: "1s", preAllocatedVUs: 400,
+              stages: [{ target: 400, duration: "5m" }, { target: 400, duration: "8m" },
+                       { target: 800, duration: "1m" }, { target: 0, duration: "1m" }] },
+  },
+  thresholds: { "http_req_duration{route:withdrawals}": ["p(95)<200"], "http_req_failed": ["rate<0.01"] },
+};`, "loadtest/k6.js")}
+      <ol class="muted" style="margin:6px 0 0;padding-left:18px"><li>Every request carries a unique Idempotency-Key and is logged with its response.</li><li>After the run, a pure Python reference model replays the accepted requests and computes what every balance should be.</li><li>The model is compared with the database account by account, plus the four ledger invariants and a full reconciliation.</li></ol></div>
+    <div class="grid g4">${[["Requests", "1.24 M", ""], ["Peak throughput", "806 req/s", ""], ["p95 at 400 req/s", "58 ms", "good"], ["Errors", "0.31%", ""]].map(([l, v, c]) => `<div class="card stat ${c}"><div class="lbl">${l}</div><div class="val">${v}</div></div>`).join("")}</div>
+    <div class="grid g2">
+      <div class="card pad">${lineChart("ltrps", { title: "Throughput (req/s)", labels: lab, unit: "elapsed", fmtv: v => v.toFixed(0), height: 230, width: 420, series: [{ name: "req/s", color: "var(--s1)", values: rps }] })}</div>
+      <div class="card pad">${lineChart("ltp95", { title: "p95 latency (ms)", labels: lab, unit: "elapsed", fmtv: v => v.toFixed(0), height: 230, width: 420, series: [{ name: "p95", color: "var(--s2)", values: p95 }] })}</div></div>
+    <div class="card pad"><h2 class="t">Latency by endpoint (ms, steady state)</h2><table><tr><th>Endpoint</th><th>Type</th><th class="num">p50</th><th class="num">p95</th><th class="num">p99</th></tr>
+      ${eps.map(([e, t, a, b, c]) => `<tr><td class="mono">${e}</td><td class="muted">${t}</td><td class="num">${a}</td><td class="num">${b}</td><td class="num">${c}</td></tr>`).join("")}</table>
+      <p class="faint small" style="margin:10px 0 0">Errors are all 429s from rate limiting during the spike. No 5xx.</p></div>
+    <div class="card pad"><h2 class="t">Money correctness after the run</h2><p class="muted small" style="margin:0 0 10px">Speed is half the report.</p>
+      ${asserts.map(([n, v, d]) => `<div class="check"><span class="ok">✓</span><div style="flex:1"><div>${n}</div><div class="faint small">${d}</div></div><b class="mono">${v}</b></div>`).join("")}</div>
+    <div class="card pad"><h2 class="t">Findings</h2><table><tr><th style="width:28%">Bottleneck</th><th>Evidence</th><th>Next step</th></tr>
+      <tr><td>Cash-at-bank row per space is a hot lock</td><td class="muted">p99 for withdrawals on the hot account rose to 410 ms during the spike; lock wait dominated.</td><td class="muted">Fine for the demo. Production: split the cash account into hashed sub-accounts (${L("scaling", "Scaling")}).</td></tr>
+      <tr><td>Connection pool saturation at 800 req/s</td><td class="muted">Pool wait p95 reached 35 ms on API pods.</td><td class="muted">PgBouncer in front of RDS.</td></tr></table></div>`;
+}
+
+function engDrills() {
+  const drills = [["Bank swallows the response", "S4", "One transfer at the bank, one journal in the books, money held until confirmed", "#/app"], ["Bank unavailable (503)", "S4", "Classified unknown, retried with the same key, no duplicate", "#/eng/incidents"],
+    ["Duplicate and out-of-order webhooks", "S1–S4", "Each bank event changes the books at most once", "#/eng/bank"], ["50 concurrent withdrawals of $10 from $100", "S4", "Exactly 10 succeed", "#/eng/consistency"],
+    ["Chargeback after funds were spent", "S5", "Negative balance, freeze, write-off needs a second person", "#/ops/overview"], ["Unknown bank transaction appears", "Recon", "Found on the next reconciliation run and escalated", "#/ops/recon"]];
+  return `<div class="card pad"><h2 class="t">Failure drills</h2><p class="muted small" style="margin:0 0 12px">Each drill is an automated test against the simulator. The first two also run live in the customer app.</p>
+    <table><tr><th>Drill</th><th>Case</th><th>Passes when</th><th></th></tr>
+    ${drills.map(([d, c, p, link]) => `<tr><td>${d}</td><td class="mono">${c}</td><td class="muted">${p}</td><td><a class="btn sm ghost" href="${link}">See it</a></td></tr>`).join("")}</table></div>`;
+}
+
+function engQA() {
+  const qa = [
+    ["How do you guarantee you never pay out twice?", `Three things together: the transfer id is Column's Idempotency-Key, so any retry refers to the same bank transfer; an ambiguous outcome never releases the hold or creates a new key; and if Column ever hands back a transfer that doesn't match our request, it goes to a person. The drill in ${L("flows", "S4")} shows it end to end.`],
+    ["Your process dies right after Column accepted the withdrawal. Then what?", "The transfer is still held (or unknown) in Postgres. The recovery job retries with the same key, Column returns the transfer it already created, and we apply its state. Nothing in that path depends on the process that died."],
+    ["Why not put a queue between the API and the bank?", `A queue adds a second commit point and at-least-once delivery on the hottest path, and Kinesis can't commit with Postgres. For five flows a Postgres job table drained with SKIP LOCKED does the same job with one source of truth. ${L("decisions", "ADR-2")}`],
+    ["Can someone forge or replay a webhook?", "Forge: no, the HMAC over the raw body is verified first. Replay: yes, Column's signature has no timestamp, which is exactly why a webhook only triggers a re-fetch from Column's API. A replayed event can't make us do anything Column's current state doesn't justify."],
+    ["Why not SERIALIZABLE?", `It's correct but turns contention on a hot account into aborted transactions. Explicit locks in a fixed order make the waiting visible and measurable; the load test shows where it starts to hurt. ${L("decisions", "ADR-6")}`],
+    ["How do you know the books are right?", `Four SQL invariants that must return zero rows, run continuously; reconciliation against Column's own transactions; and after load tests, a reference model compared account by account. ${L("ledger", "Ledger")}`],
+    ["What's the hold period for, and how would you set it?", "It bounds return risk: ACH debits can come back for days, unauthorized ones for up to 60. In production I'd set it per customer from tenure and return history, with an exposure cap; in the demo it's 10 minutes so you can watch it."],
+    ["The customer spent the money and the debit came back. Now what?", "Only returns may take a balance negative. Spending freezes, an event is raised, and a write-off needs a second person, enforced by a CHECK constraint, not just the UI. Cash at bank isn't touched by the write-off."],
+    ["What breaks first at 100×?", `The per-space cash row (hot lock), then a single primary for writes. Hashed cash sub-accounts first, then sharding by customer so single-customer operations stay local. ${L("scaling", "Scaling & limits")}`],
+    ["What would you do with another month?", "Postgres row-level security for space isolation; move bank calls to a worker; an outbox for notifications; crash-injection tests at every boundary; and a property-based test that generates random interleavings against the reference model."],
+  ];
+  return `<div class="card pad"><h2 class="t">Hard questions</h2><p class="muted small" style="margin:0 0 12px">What I'd ask if I were reviewing this, with my answers.</p>
+    ${qa.map(([q, a], i) => `<details class="adr" ${i === 0 ? "open" : ""}><summary>${q}</summary><div class="adr-body"><p style="margin:0">${a}</p></div></details>`).join("")}</div>`;
+}
+
+// ================================================================== interactions
+function act(kind, arg) {
+  if (kind === "s1") { if (S.done.s1) return toast("Already paid. Try the next step."); flows.payroll(); }
+  else if (kind === "s2") { if (S.transfers.some(t => t.kind === "pull")) return toast("Pull already started. Advance the clock."); flows.pull(); }
+  else if (kind === "s3") return sheet("send");
+  else if (kind === "s4") return sheet("withdraw");
+  else if (kind === "s5") flows.chargeback();
+  else if (kind === "advance") flows.advance();
+  else if (kind === "retry") { flows.retry(tById(arg)); S.sheet = { kind: "detail", id: arg }; S.hood = "ledger"; }
+  else if (kind === "requestWriteOff") flows.requestWriteOff();
+  else if (kind === "approveWriteOff") flows.approveWriteOff();
+  else if (kind === "ai") S.ai = aiAnswer();
+  else if (kind === "injectMismatch") flows.injectMismatch();
+  else if (kind === "reconcile") flows.reconcile();
+  else if (kind === "resolve") flows.resolveException(arg);
+  else if (kind === "report") S.report = buildReport();
+  else if (kind === "tryApi") { const ep = ENDPOINTS.find(e => `${e[0]} ${e[1]}` === S.api); S.apiResult = ep[4](); }
+  if (/^s\d$/.test(kind) && !location.hash.includes("app")) location.hash = "#/app";
+  render();
+}
+function sheet(kind) { S.sheet = { kind }; if (!location.hash.includes("app")) location.hash = "#/app"; render(); }
+function openDetail(id) { S.selected = id; S.sheet = { kind: "detail", id }; render(); }
+function submitSheet() {
+  const amount = Math.round(parseFloat(document.getElementById("amt").value || "0") * 100);
+  if (!(amount > 0)) return toast("Enter an amount");
+  if (S.sheet.kind === "send") flows.p2p(amount); else flows.withdraw(amount, document.getElementById("drill").checked);
+  S.sheet = null; S.hood = "timeline"; render();
+}
+function goTo(id, tab) { if (id) S.selected = id; S.hood = tab || "timeline"; S.pane = "hood"; location.hash = "#/app"; render(); }
+
+// ================================================================== background: drifting fern veins
+(function veins() {
+  const c = document.getElementById("veins"), g = c.getContext("2d");
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const fronds = Array.from({ length: 7 }, (_, i) => ({ x: (i + 0.5) / 7, y: 0.15 + (i % 3) * 0.32, a: -0.9 + (i % 4) * 0.55, len: 0.38 + (i % 3) * 0.12, ph: i * 1.7 }));
+  function size() { c.width = innerWidth * devicePixelRatio; c.height = innerHeight * devicePixelRatio; }
+  function draw(time) {
+    const W = c.width, H = c.height, s = Math.min(W, H);
+    g.clearRect(0, 0, W, H); g.lineWidth = devicePixelRatio; g.strokeStyle = "rgba(82,224,138,0.06)";
+    for (const f of fronds) {
+      let x = f.x * W, y = f.y * H, ang = f.a + (still ? 0 : Math.sin(time / 6000 + f.ph) * 0.05);
+      const steps = 26, seg = (f.len * s) / steps;
+      for (let i = 0; i < steps; i++) {
+        const nx = x + Math.cos(ang) * seg, ny = y + Math.sin(ang) * seg;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(nx, ny); g.stroke();
+        const leaf = seg * 2.4 * (1 - i / steps);
+        for (const side of [-1, 1]) { const la = ang + side * 1.05;
+          g.beginPath(); g.moveTo(nx, ny); g.quadraticCurveTo(nx + Math.cos(la) * leaf * .6, ny + Math.sin(la) * leaf * .6, nx + Math.cos(la - side * .35) * leaf, ny + Math.sin(la - side * .35) * leaf); g.stroke(); }
+        x = nx; y = ny; ang += 0.045;
+      }
+    }
+    if (!still) requestAnimationFrame(draw);
+  }
+  addEventListener("resize", size); size(); requestAnimationFrame(draw);
+})();
+
+render();
+</script>
+</body>
+</html>
