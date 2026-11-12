@@ -29,6 +29,10 @@ spec:
             - { name: FERN_ENV, value: aws }
             - { name: FERN_BANK, value: column }
             - { name: FERN_POOL_ONLY, value: "true" }
+            # Real Plaid sandbox for the balance check before pulls (the default is the simulator).
+            - { name: FERN_PLAID, value: sandbox }
+            - { name: FERN_RATE_LIMIT_PER_MINUTE, value: "30" }
+            # FERN_DATABASE_URL and FERN_REDIS_URL come from Terraform via the fern-env secret.
             # The Cloudflare Worker strips /apps/fern before forwarding; this keeps /docs links right.
             - { name: FERN_ROOT_PATH, value: /apps/fern }
           readinessProbe:
