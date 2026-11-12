@@ -13,3 +13,4 @@ infra/aws/.terraform/
 .env.deploy
 infra/.kubeconfig
 infra/aws/tfplan
+infra/cloudflare/.wrangler/
