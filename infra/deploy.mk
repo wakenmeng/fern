@@ -69,7 +69,7 @@ k8s-status:
 
 # Load test (about 8 minutes): a sim-bank copy of the API on its own database, driven by
 # bench/load.py from inside the cluster. Result: bench/results/latest.json. Everything is removed after.
-BENCH_STAGES ?= 30:50,240:200,60:400,30:50
+BENCH_STAGES ?= 60:25,60:50,60:100,60:150,60:200
 # The bench uses the image fern-api is running now, so it measures exactly what is live.
 BENCH_IMG   = $$($(K) get deployment fern-api -o jsonpath='{.spec.template.spec.containers[0].image}')
 bench:

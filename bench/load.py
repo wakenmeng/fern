@@ -268,9 +268,27 @@ def run(args: argparse.Namespace) -> dict:
     rps = [p["rps"] for p in series]
     window = 10
     rolling = [statistics.mean(rps[i : i + window]) for i in range(max(1, len(rps) - window + 1))]
-    sustained_stage = max(stages, key=lambda s: s[0])
-    start = sum(d for d, _ in stages[: stages.index(sustained_stage)])
-    sustained = series[start : start + sustained_stage[0]]
+
+    # Per stage, skipping its first 10 s while the new VUs ramp in.
+    stage_results, start = [], 0
+    for duration, n in stages:
+        secs_in = [s for s in range(start + min(10, duration // 3), start + duration) if s in stats.per_sec]
+        ms = [x for s in secs_in for x in stats.per_sec[s]]
+        stage_results.append(
+            {
+                "vus": n,
+                "seconds": duration,
+                "rps": round(len(ms) / max(1, len(secs_in)), 1),
+                "p50_ms": pct(ms, 50),
+                "p95_ms": pct(ms, 95),
+                "p99_ms": pct(ms, 99),
+                "errors": sum(stats.errors_per_sec.get(s, 0) for s in secs_in),
+            }
+        )
+        start += duration
+    # Capacity: the busiest stage that still met the latency objective with no errors.
+    ok = [s for s in stage_results if s["p95_ms"] <= args.slo_ms and s["errors"] == 0]
+    best = max(ok, key=lambda s: s["rps"]) if ok else min(stage_results, key=lambda s: s["p95_ms"])
     return {
         "run_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "method": {
@@ -282,11 +300,15 @@ def run(args: argparse.Namespace) -> dict:
             "mix": {n: w for w, n in MIX},
             "api_replicas": args.replicas,
             "load_processes": args.procs,
+            "slo_p95_ms": args.slo_ms,
+            "note": args.note,
         },
         "headline": {
             "peak_rps_10s": round(max(rolling), 1),
-            "sustained_rps": round(statistics.mean(p["rps"] for p in sustained), 1) if sustained else 0,
-            "sustained_p95_ms": pct([ms for p in sustained for ms in stats.per_sec[p["t"]]], 95),
+            # "Sustained" = capacity: the busiest stage that kept p95 within the SLO, no errors.
+            "sustained_rps": best["rps"],
+            "sustained_p95_ms": best["p95_ms"],
+            "sustained_vus": best["vus"],
             "peak_vus": peak,
             "requests": len(all_ms),
             "error_rate": round(sum(stats.errors_per_sec.values()) / max(1, len(all_ms)), 5),
@@ -294,6 +316,7 @@ def run(args: argparse.Namespace) -> dict:
             "p95_ms": pct(all_ms, 95),
             "p99_ms": pct(all_ms, 99),
         },
+        "stages": stage_results,
         "series": series,
         "endpoints": [
             {"name": n, "count": len(xs), "p50": pct(xs, 50), "p95": pct(xs, 95), "p99": pct(xs, 99)}
@@ -320,10 +343,12 @@ def run(args: argparse.Namespace) -> dict:
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--base", default="http://fern-bench.fern.svc")
-    p.add_argument("--stages", default="30:50,240:200,60:400,30:50")
+    p.add_argument("--stages", default="60:25,60:50,60:100,60:150,60:200")
     p.add_argument("--think", type=float, default=1.0, help="max think time between steps, seconds")
     p.add_argument("--replicas", type=int, default=2)
     p.add_argument("--procs", type=int, default=4, help="load-generator processes")
+    p.add_argument("--slo-ms", type=float, default=500, help="p95 latency objective for capacity")
+    p.add_argument("--note", default="", help="free text for the method section, e.g. the bottleneck")
     p.add_argument("--out", default="/tmp/bench.json")
     args = p.parse_args()
     result = run(args)
