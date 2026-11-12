@@ -17,7 +17,7 @@ from fastapi.responses import JSONResponse
 from psycopg import AsyncConnection
 from pydantic import BaseModel, Field
 
-from fern import ledger, payments, pool, spaces
+from fern import ledger, ops_api, payments, pool, spaces
 from fern.bank import Bank, BankEvent, BankTxn, SimulatedBank
 from fern.column import ColumnBank
 from fern.plaid import PlaidClient, SimulatedPlaid, SourceAccount
@@ -100,6 +100,7 @@ def create_app(settings: Settings | None = None, bank: Bank | None = None) -> Fa
         )
 
     _routes(app)
+    app.include_router(ops_api.router)
     return app
 
 
