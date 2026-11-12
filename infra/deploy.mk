@@ -25,10 +25,11 @@ infra-down:  ## destroy everything this run created
 kubeconfig:
 	aws eks update-kubeconfig --region $(AWS_REGION) --name $$($(TFD) output -raw cluster_name) --kubeconfig $(KCFG)
 
+# Builds the committed tree only (git archive), so uncommitted edits never ship under a git-sha tag.
 image:  ## build for Graviton (arm64) and push to ECR
 	@REPO=$$($(TFD) output -raw ecr_repository_url); \
 	aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $${REPO%%/*}; \
-	docker buildx build --platform linux/arm64 -t $$REPO:$(TAG) --push .
+	git archive $(TAG) | docker buildx build --platform linux/arm64 -t $$REPO:$(TAG) --push -
 
 # Secrets: .env.deploy (gitignored, see .env.deploy.example) plus the Terraform outputs.
 # The combined env file only exists inside a private temp dir for the duration of this target.
