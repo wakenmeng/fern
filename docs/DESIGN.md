@@ -5,6 +5,30 @@
 > v0.5 的变化：主银行从 Increase 换成 **Column**（持牌银行 Column N.A.）。§6.4 列出 Column 的能力核对结果和带来的设计调整。
 > 项目名 `Fern`，部署在 `waken.dev/apps/fern`。**不使用 Green 的名称或品牌。**
 > 本文是内部工作稿，用中文写。对外展示版（README、/eng 页面）用英文。
+> v0.6（2026-11-12）：按「够用就好」收窄了实现范围，见下面的「v1 实现范围」。正文保留原设计，和实现不一致的地方以这一节为准。
+
+## v1 实现范围（以代码为准）
+
+**做了，并且有测试或沙箱实测：**
+
+| 部分 | 实现 | 验证 |
+|---|---|---|
+| 账本、hold、restriction、幂等 | `ledger.py`、`payments.py`、`platform/idempotency.py` | S1–S5 场景测试、并发、重放、乱序 webhook |
+| Column 接入 | `column.py`（同键重试、429 退避、结果未知的分类） | 五个场景在 sandbox 跑通，账本银行余额等于 Column 余额 |
+| 账户池 | `pool.py`：5 个预注资空间；用完后可进入已有访客的空间 | 并发领取测试；Column 实测 |
+| Trace | `platform/tracing.py`：进程内记录，存在 Postgres，不用 OpenTelemetry 和 Tempo | `test_tracing.py` |
+| Plaid、限流 | 拉款前用 Plaid 查余额；Redis 按空间的令牌桶，Redis 不可用时放行 | `test_tracing.py`、Plaid sandbox |
+| 对账 | `recon.py`：逐笔核对现金流动，再比较 `available_amount` 和账本余额；演练「账外扣款 $25」 | `test_ops.py`；Column 实测 |
+| AI 报告 | `ai.py`：一次结构化输出调用，不是 agent；事实只读收集；Postgres 里按天封顶预算；没有 key 时用规则生成 | `test_ops.py`（用替身模拟 Claude） |
+| 部署 | `Dockerfile`、`infra/aws`（EKS、RDS、Redis、ECR）、`infra/k8s`、`infra/cloudflare`、`docs/DEPLOY.md` | 镜像本地冒烟、`tofu validate`、Worker 测试；**还没在真实 AWS 上跑过** |
+
+**和正文不同的决定：**
+
+- **不做** RLS、数据库角色分离、Kinesis、Alembic，也不单独部署 worker。恢复、结算、释放限制都由 API 端点触发（演示时钟）。
+- **入口改用 Cloudflare Tunnel。** 不用 ALB，也就没有公网入站端口和证书；没有 NAT 网关。
+- **预算记在 Postgres。** AI 预算预占改为 Postgres 里的 advisory lock 加 `ai_reports` 表，不放 Redis。
+- **对账只比较 `available_amount`。** 拉入的 debit 结算前留在 Column 的 `pending_amount` 里，账本也是结算时才记现金。
+- **S5 分两段。** Column 上是 R29 退回，restriction 还在，所以没有损失；负余额和销账在模拟银行上演示。
 
 ---
 
