@@ -1,7 +1,27 @@
 # Fern
 
-A neobank backend demo: five everyday banking flows, a double-entry ledger, and the failure
-modes a real money system has to survive. **Sandbox only. No real money, no real identities.**
+A neobank backend demo, live at **https://waken.dev/apps/fern/** until 2026-11-19 (a static archive
+after that). Five everyday banking flows on a double-entry ledger, built to survive the failure modes a
+real money system meets. **Sandbox only. No real money, no real identities.**
+
+## Architecture
+
+```
+Browser ─► Cloudflare (Worker on waken.dev/apps/fern) ─► Cloudflare Tunnel
+             └─► AWS EKS: FastAPI (Python 3.13) ─┬─► RDS Postgres 16, Multi-AZ  (ledger)
+                                                 ├─► ElastiCache Redis           (rate limits)
+                                                 └─► Column (bank, ACH) · Plaid (balances) · OpenAI (ops reports)
+```
+
+- **Ledger:** double-entry in Postgres. Every money movement is one transaction with an idempotency key,
+  every journal balances, and the books are reconciled against Column's records.
+- **Integrations:** Column sandbox for accounts and ACH, Plaid sandbox for linked-account balances,
+  OpenAI for the daily ops report (with a rules-based fallback).
+- **Infra:** EKS on Graviton, RDS, ElastiCache and ECR, provisioned with OpenTofu. Traffic arrives through a
+  Cloudflare Tunnel, so there is no load balancer and no inbound port. Runbook: [docs/DEPLOY.md](docs/DEPLOY.md).
+- **Tracing:** every state-changing request records its SQL, bank, Plaid and Redis calls; the demo UI shows
+  the trace next to the phone.
+- **Load test:** 1,325 req/s within p95 500 ms, 90,222 transfers, 0 money errors ([bench/results](bench/results)).
 
 ## The five cases
 
