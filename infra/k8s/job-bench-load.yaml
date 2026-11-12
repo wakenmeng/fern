@@ -9,7 +9,15 @@ spec:
   template:
     spec:
       restartPolicy: Never
-      affinity:  # keep the load generator off the nodes' busiest pod where possible
+      tolerations:
+        - { key: fern/bench, operator: Exists, effect: NoSchedule }
+      affinity:  # on the bench nodes if there are any; away from the API copies where possible
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - { key: fern/bench, operator: In, values: ["true"] }
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 50
@@ -20,12 +28,12 @@ spec:
       containers:
         - name: load
           image: IMAGE
-          command: ["python", "/bench/load.py", "--base", "http://fern-bench.fern.svc", "--out", "/tmp/bench.json", "--procs", "4"]
+          command: ["python", "/bench/load.py", "--base", "http://fern-bench.fern.svc", "--out", "/tmp/bench.json"]
           args: []
           volumeMounts:
             - { name: script, mountPath: /bench }
           resources:
-            requests: { cpu: 1000m, memory: 512Mi }
+            requests: { cpu: LOAD_CPU, memory: 1Gi }
       volumes:
         - name: script
           configMap: { name: fern-bench-script }

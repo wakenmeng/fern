@@ -7,13 +7,23 @@ metadata:
   name: fern-bench
   namespace: fern
 spec:
-  replicas: 2
+  replicas: REPLICAS
   selector:
     matchLabels: { app: fern-bench }
   template:
     metadata:
       labels: { app: fern-bench }
     spec:
+      # On the bench nodes when `make bench-up` created them (BENCH_SIZE=large), else anywhere.
+      tolerations:
+        - { key: fern/bench, operator: Exists, effect: NoSchedule }
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - { key: fern/bench, operator: In, values: ["true"] }
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
@@ -39,7 +49,7 @@ spec:
             httpGet: { path: /healthz, port: 8000 }
             periodSeconds: 5
           resources:
-            requests: { cpu: 250m, memory: 256Mi }
+            requests: { cpu: API_CPU, memory: 256Mi }
             limits: { memory: 512Mi }
           securityContext:
             runAsNonRoot: true

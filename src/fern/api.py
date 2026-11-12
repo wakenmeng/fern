@@ -58,10 +58,13 @@ def create_app(settings: Settings | None = None, bank: Bank | None = None) -> Fa
         # in flight would each hold a connection and wait for a second one forever.
         app.state.trace_pool = create_pool(settings.database_url, max_size=4)
         await app.state.trace_pool.open()
+        app.state.traces = tracing.TraceWriter(app.state.trace_pool)
+        app.state.traces.start()
         app.state.limiter = (
             RateLimiter(settings.redis_url, settings.rate_limit_per_minute) if settings.redis_url else None
         )
         yield
+        await app.state.traces.aclose()
         await app.state.pool.close()
         await app.state.trace_pool.close()
         for client in (app.state.bank, app.state.source, app.state.limiter):
@@ -91,9 +94,7 @@ def create_app(settings: Settings | None = None, bank: Bank | None = None) -> Fa
             if response.status_code >= 500:
                 tr.root.status = "error"
         response.headers["X-Trace-Id"] = tr.id
-        if tr.space_id is not None:
-            async with app.state.trace_pool.connection() as c:
-                await tracing.save(c, tr)
+        await app.state.traces.save(tr)
         return response
 
     @app.exception_handler(payments.PaymentError)

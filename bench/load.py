@@ -294,7 +294,7 @@ def run(args: argparse.Namespace) -> dict:
         "method": {
             "where": "k8s Job inside the EKS cluster, against the fern-bench Deployment",
             "bank": "simulated (in-process, Column-like contract); the Column sandbox is not load tested",
-            "database": "the same RDS instance, separate database fern_bench",
+            "database": args.database,
             "stages": [{"seconds": d, "vus": n} for d, n in stages],
             "think_time_s": [0, args.think],
             "mix": {n: w for w, n in MIX},
@@ -340,6 +340,21 @@ def run(args: argparse.Namespace) -> dict:
     }
 
 
+def wait_ready(base: str, seconds: int = 600) -> None:
+    """The Job starts before the API copies are up (make bench), so wait for /healthz first."""
+    end = time.monotonic() + seconds
+    while True:
+        try:
+            if httpx.get(f"{base}/healthz", timeout=5).status_code == 200:
+                time.sleep(20)  # let the rest of the replicas come up behind the first one
+                return
+        except httpx.HTTPError:
+            pass
+        if time.monotonic() > end:
+            raise SystemExit(f"{base} not ready after {seconds}s")
+        time.sleep(3)
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--base", default="http://fern-bench.fern.svc")
@@ -349,8 +364,10 @@ def main() -> None:
     p.add_argument("--procs", type=int, default=4, help="load-generator processes")
     p.add_argument("--slo-ms", type=float, default=500, help="p95 latency objective for capacity")
     p.add_argument("--note", default="", help="free text for the method section, e.g. the bottleneck")
+    p.add_argument("--database", default="the same RDS instance, separate database fern_bench")
     p.add_argument("--out", default="/tmp/bench.json")
     args = p.parse_args()
+    wait_ready(args.base)
     result = run(args)
     with open(args.out, "w") as f:
         json.dump(result, f, indent=1)

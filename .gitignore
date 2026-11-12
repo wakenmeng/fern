@@ -7,10 +7,13 @@ __pycache__/
 
 # Terraform / OpenTofu
 infra/aws/.terraform/
+infra/aws-bench/.terraform/
+infra/aws-bench/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 # Deploy secrets (make k8s-secret reads it)
 .env.deploy
 infra/.kubeconfig
 infra/aws/tfplan
+infra/aws-bench/tfplan
 infra/cloudflare/.wrangler/

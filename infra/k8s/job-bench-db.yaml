@@ -18,7 +18,8 @@ spec:
             - |
               import os, psycopg
               from fern.platform.migrate import migrate
-              admin, bench = os.environ["ADMIN_URL"], os.environ["FERN_DATABASE_URL"]
+              bench = os.environ["FERN_DATABASE_URL"]
+              admin = bench.replace("/fern_bench?", "/postgres?")
               with psycopg.connect(admin, autocommit=True) as c:
                   c.execute("DROP DATABASE IF EXISTS fern_bench WITH (FORCE)")
                   c.execute("CREATE DATABASE fern_bench")
@@ -26,7 +27,3 @@ spec:
               print("fern_bench ready")
           envFrom:
             - secretRef: { name: fern-bench-env }
-          env:
-            - name: ADMIN_URL
-              valueFrom:
-                secretKeyRef: { name: fern-env, key: FERN_DATABASE_URL }

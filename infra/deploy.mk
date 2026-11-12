@@ -12,7 +12,7 @@ K          := kubectl --kubeconfig $(KCFG) -n fern
 TAG        ?= $(shell git rev-parse --short HEAD)
 IMG         = $$($(TFD) output -raw ecr_repository_url):$(TAG)
 
-.PHONY: infra-up infra-down kubeconfig image k8s-secret k8s-migrate k8s-apply k8s-pool deploy k8s-status tunnel bench
+.PHONY: infra-up infra-down kubeconfig image k8s-secret k8s-migrate k8s-apply k8s-pool deploy k8s-status tunnel bench bench-up bench-down
 
 infra-up:  ## VPC, EKS, RDS, Redis, ECR (about 15-20 minutes)
 	$(TFD) init -input=false
@@ -67,23 +67,62 @@ deploy: image k8s-secret k8s-migrate k8s-apply  ## build, push, migrate, roll ou
 k8s-status:
 	$(K) get pods,jobs,svc
 
-# Load test (about 8 minutes): a sim-bank copy of the API on its own database, driven by
-# bench/load.py from inside the cluster. Result: bench/results/latest.json. Everything is removed after.
-BENCH_STAGES ?= 60:25,60:50,60:100,60:150,60:200
-# The bench uses the image fern-api is running now, so it measures exactly what is live.
+# Load test: a sim-bank copy of the API on its own database, driven by bench/load.py from inside
+# the cluster. Result: bench/results/latest.json. Everything is removed after.
+#   make bench                  small: fern_bench on the live RDS instance, live nodes (~6 minutes)
+#   make bench-up; make bench BENCH_SIZE=large; make bench-down
+#                               large: its own Multi-AZ db.m7g.2xlarge and 2 c7g.4xlarge nodes
+#                               (infra/aws-bench, about $2.50/hour while up)
+BENCH_SIZE ?= small
+ifeq ($(BENCH_SIZE),large)
+BENCH_STAGES   ?= 60:100,60:200,60:400,60:600,60:800
+BENCH_REPLICAS ?= 12
+BENCH_API_CPU  ?= 1000m
+BENCH_PROCS    ?= 8
+BENCH_LOAD_CPU ?= 7000m
+BENCH_DB_URL    = $$($(TF) -chdir=infra/aws-bench output -raw database_url)
+BENCH_DB_DESC  ?= its own RDS Postgres 16, db.m7g.2xlarge (8 vCPU) Multi-AZ, like live
+else
+BENCH_DB_DESC  ?= the same RDS instance (db.t4g.micro Multi-AZ), separate database fern_bench
+BENCH_STAGES   ?= 60:25,60:50,60:100,60:150,60:200
+BENCH_REPLICAS ?= 2
+BENCH_API_CPU  ?= 250m
+BENCH_PROCS    ?= 4
+BENCH_LOAD_CPU ?= 1000m
+BENCH_DB_URL    = $$($(TFD) output -raw database_url | sed 's|/fern?sslmode|/fern_bench?sslmode|')
+endif
+# The bench uses the image fern-api is running now, so it measures exactly what is live
+# (override with BENCH_TAG=<git sha> to measure a build before it goes live).
+ifdef BENCH_TAG
+BENCH_IMG   = $$($(TFD) output -raw ecr_repository_url):$(BENCH_TAG)
+else
 BENCH_IMG   = $$($(K) get deployment fern-api -o jsonpath='{.spec.template.spec.containers[0].image}')
+endif
+BENCH_TFD   = $(TF) -chdir=infra/aws-bench
+BENCH_TFVARS = -var region=$(AWS_REGION) -var run_id=$(RUN_ID)
+
+bench-up:  ## bench-only database + nodes next to the live run (about 20 minutes)
+	$(BENCH_TFD) init -input=false
+	$(BENCH_TFD) apply $(BENCH_TFVARS)
+
+bench-down:
+	$(BENCH_TFD) destroy $(BENCH_TFVARS)
+
 bench:
-	@url=$$($(TFD) output -raw database_url | sed 's#/fern?sslmode#/fern_bench?sslmode#'); \
+	@url=$(BENCH_DB_URL); \
 	$(K) create secret generic fern-bench-env --from-literal=FERN_DATABASE_URL="$$url" \
 	  --dry-run=client -o yaml | $(K) apply -f - >/dev/null
 	$(K) delete job fern-bench-db fern-bench-load --ignore-not-found
 	sed "s#image: IMAGE#image: $(BENCH_IMG)#" infra/k8s/job-bench-db.yaml | $(K) apply -f -
 	$(K) wait --for=condition=complete job/fern-bench-db --timeout=300s
-	sed "s#image: IMAGE#image: $(BENCH_IMG)#" infra/k8s/bench-api.yaml | $(K) apply -f -
-	$(K) rollout status deployment/fern-bench --timeout=300s
 	$(K) create configmap fern-bench-script --from-file=bench/load.py --dry-run=client -o yaml | $(K) apply -f -
-	sed -e "s#image: IMAGE#image: $(BENCH_IMG)#" -e 's#args: \[\]#args: ["--stages", "$(BENCH_STAGES)"]#' \
-	  infra/k8s/job-bench-load.yaml | $(K) apply -f -
+	# The load generator first (it is the biggest pod and waits for the API), then the API copies.
+	sed -e "s#image: IMAGE#image: $(BENCH_IMG)#" \
+	  -e 's#args: \[\]#args: ["--stages", "$(BENCH_STAGES)", "--procs", "$(BENCH_PROCS)", "--replicas", "$(BENCH_REPLICAS)", "--database", "$(BENCH_DB_DESC)"]#' \
+	  -e 's#cpu: LOAD_CPU#cpu: $(BENCH_LOAD_CPU)#' infra/k8s/job-bench-load.yaml | $(K) apply -f -
+	sed -e "s#image: IMAGE#image: $(BENCH_IMG)#" -e 's#replicas: REPLICAS#replicas: $(BENCH_REPLICAS)#' \
+	  -e 's#cpu: API_CPU#cpu: $(BENCH_API_CPU)#' infra/k8s/bench-api.yaml | $(K) apply -f -
+	$(K) rollout status deployment/fern-bench --timeout=300s
 	@until [ -n "$$($(K) get job fern-bench-load -o jsonpath='{.status.succeeded}{.status.failed}')" ]; do sleep 10; done; \
 	if [ "$$($(K) get job fern-bench-load -o jsonpath='{.status.succeeded}')" != 1 ]; then \
 	  $(K) logs job/fern-bench-load --tail=30; echo "bench job failed"; exit 1; fi

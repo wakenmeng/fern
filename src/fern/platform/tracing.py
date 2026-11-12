@@ -11,6 +11,7 @@ database transactions (db.transaction), bank calls (column.py, bank.py), Plaid (
 Redis (ratelimit.py). Code outside a trace pays one contextvar lookup per call.
 """
 
+import asyncio
 import re
 import secrets
 import time
@@ -140,18 +141,66 @@ def sql_name(query: str) -> str:
 # --------------------------------------------------------------------------- storage
 
 
+_INSERT = "INSERT INTO traces (id, space_id, name, status, duration_us, spans) VALUES (%s, %s, %s, %s, %s, %s)"
+
+
+def _row(tr: Trace) -> tuple:
+    data = tr.to_json()
+    return (tr.id, tr.space_id, data["name"], data["status"], data["duration_us"], Jsonb(data["spans"]))
+
+
 async def save(conn: AsyncConnection, tr: Trace) -> None:
     if tr.space_id is None:
         return
-    data = tr.to_json()
     token = _trace.set(None)  # writing the trace is not part of it
     try:
-        await conn.execute(
-            "INSERT INTO traces (id, space_id, name, status, duration_us, spans) VALUES (%s, %s, %s, %s, %s, %s)",
-            (tr.id, tr.space_id, data["name"], data["status"], data["duration_us"], Jsonb(data["spans"])),
-        )
+        await conn.execute(_INSERT, _row(tr))
     finally:
         _trace.reset(token)
+
+
+class TraceWriter:
+    """Group commit for traces. Each request hands over its trace and waits until it is stored, so
+    GET /traces/{id} right after the response still finds it. Whatever piles up while a write is in
+    flight goes into the next one, as one transaction: under load, one commit covers hundreds of
+    traces instead of one commit (and one standby round trip) per request."""
+
+    def __init__(self, pool: Any, writers: int = 2, batch: int = 500) -> None:
+        self.pool, self.writers, self.batch = pool, writers, batch
+        self.queue: asyncio.Queue[tuple[Trace, asyncio.Future[None]]] = asyncio.Queue()
+        self.tasks: list[asyncio.Task[None]] = []
+
+    def start(self) -> None:
+        self.tasks = [asyncio.create_task(self._run()) for _ in range(self.writers)]
+
+    async def aclose(self) -> None:
+        for t in self.tasks:
+            t.cancel()
+        await asyncio.gather(*self.tasks, return_exceptions=True)
+
+    async def save(self, tr: Trace) -> None:
+        if tr.space_id is None:
+            return
+        done: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+        self.queue.put_nowait((tr, done))
+        await done
+
+    async def _run(self) -> None:
+        while True:
+            items = [await self.queue.get()]
+            while not self.queue.empty() and len(items) < self.batch:
+                items.append(self.queue.get_nowait())
+            try:
+                async with self.pool.connection() as c, c.transaction(), c.cursor() as cur:
+                    await cur.executemany(_INSERT, [_row(tr) for tr, _ in items])
+            except Exception as exc:  # the waiting requests report it, as a direct insert would
+                for _, done in items:
+                    if not done.done():
+                        done.set_exception(exc)
+            else:
+                for _, done in items:
+                    if not done.done():
+                        done.set_result(None)
 
 
 async def recent(conn: AsyncConnection, space_id: UUID, limit: int = 20) -> list[dict[str, Any]]:
