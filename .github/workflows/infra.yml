@@ -1,0 +1,32 @@
+name: infra
+
+on:
+  push:
+    paths: ["infra/**", "Dockerfile", ".dockerignore", "pyproject.toml", "uv.lock", "src/**", "migrations/**"]
+  pull_request:
+    paths: ["infra/**", "Dockerfile", ".dockerignore", "pyproject.toml", "uv.lock", "src/**", "migrations/**"]
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: opentofu/setup-opentofu@v1
+      - run: tofu fmt -check -recursive infra/aws
+      - run: tofu -chdir=infra/aws init -backend=false -input=false
+      - run: tofu -chdir=infra/aws validate
+
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node --test infra/cloudflare/worker.test.mjs
+
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - run: docker buildx build --platform linux/amd64 -t fern-api:ci .

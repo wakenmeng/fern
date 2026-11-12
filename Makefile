@@ -23,3 +23,6 @@ dev: migrate
 SIZE ?= 5
 pool: migrate
 	uv run python -m fern.pool --size $(SIZE)
+
+# AWS / Cloudflare deploy targets (docs/DEPLOY.md)
+include infra/deploy.mk

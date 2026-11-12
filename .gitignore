@@ -4,3 +4,11 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ruff_cache/
+
+# Terraform / OpenTofu
+infra/aws/.terraform/
+*.tfstate
+*.tfstate.*
+# Deploy secrets (make k8s-secret reads it)
+.env.deploy
+infra/.kubeconfig

@@ -1,0 +1,57 @@
+# fern-api: the FastAPI app. IMAGE is substituted by `make deploy`.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fern-api
+  namespace: fern
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: fern-api }
+  template:
+    metadata:
+      labels: { app: fern-api }
+    spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: fern-api }
+      containers:
+        - name: api
+          image: IMAGE
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef: { name: fern-env }
+          env:
+            - { name: FERN_ENV, value: aws }
+            - { name: FERN_BANK, value: column }
+            - { name: FERN_POOL_ONLY, value: "true" }
+            # The Cloudflare Worker strips /apps/fern before forwarding; this keeps /docs links right.
+            - { name: FERN_ROOT_PATH, value: /apps/fern }
+          readinessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: 8000 }
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 250m, memory: 256Mi }
+            limits: { memory: 512Mi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fern-api
+  namespace: fern
+spec:
+  selector: { app: fern-api }
+  ports:
+    - port: 80
+      targetPort: 8000

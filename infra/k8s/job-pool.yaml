@@ -1,0 +1,20 @@
+# Opens and pre-funds 5 Column-backed demo spaces (~3 minutes). `make k8s-pool`.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fern-pool
+  namespace: fern
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: pool
+          image: IMAGE
+          command: ["python", "-m", "fern.pool", "--size", "5"]
+          envFrom:
+            - secretRef: { name: fern-env }
+          env:
+            - { name: FERN_BANK, value: column }

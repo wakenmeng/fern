@@ -1,0 +1,11 @@
+# Deploy: cd infra/cloudflare && npx wrangler@4 deploy
+name = "fern-router"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+routes = [{ pattern = "waken.dev/apps/fern*", zone_name = "waken.dev" }]
+
+[vars]
+MODE = "live"
+ORIGIN = "https://fern-origin.waken.dev"
+# Set to the GitHub Pages URL of the archive before switching MODE to "archive".
+ARCHIVE_ORIGIN = ""

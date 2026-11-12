@@ -1,0 +1,18 @@
+# Applies migrations/*.sql. `make k8s-migrate` runs it and waits.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: fern-migrate
+  namespace: fern
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: IMAGE
+          command: ["python", "-m", "fern.platform.migrate"]
+          envFrom:
+            - secretRef: { name: fern-env }
