@@ -47,7 +47,8 @@ check(available() == 2500_00, "S2 pull settled and released: $2,500.00")
 r = c.post("/p2p", json={"amount_minor": 50_00, "to_customer_id": s["npc_customer_id"]}, headers=idem("p2p-1"))
 check(r.status_code == 201 and available() == 2450_00, "S3 P2P $50 sent")
 again = c.post("/p2p", json={"amount_minor": 50_00, "to_customer_id": s["npc_customer_id"]}, headers=idem("p2p-1"))
-check(again.json().get("id") == r.json()["id"] and available() == 2450_00, "S3 replay with the same key: no double send")
+same = again.json().get("id") == r.json()["id"]
+check(same and available() == 2450_00, "S3 replay with the same key: no double send")
 
 r = c.post("/withdrawals", json={"amount_minor": 300_00, "drill": "drop_response"}, headers=idem("wd-1"))
 wd = r.json()["id"]

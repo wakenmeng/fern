@@ -27,7 +27,14 @@ import httpx
 
 PAYROLL = 10_000_00
 # (weight, name). Money movements are $1-$5 so a VU never runs out during the test.
-MIX = [(40, "GET /me"), (15, "GET /transfers"), (15, "POST /p2p"), (12, "POST /withdrawals"), (12, "POST /pulls"), (6, "replay")]
+MIX = [
+    (40, "GET /me"),
+    (15, "GET /transfers"),
+    (15, "POST /p2p"),
+    (12, "POST /withdrawals"),
+    (12, "POST /pulls"),
+    (6, "replay"),
+]
 
 
 class Stats:
@@ -110,7 +117,9 @@ class VU:
         elif self.keys:  # replay an earlier request with the same key: must return the same transfer
             path, key, body, tid = random.choice(self.keys)
             r = await self.call("replay (same key)", "POST", path, json=body, headers={"Idempotency-Key": key})
-            if r is None or r.status_code >= 300 or r.json().get("id") != tid:
+            if r is None or r.status_code >= 500:
+                pass  # a failed request, already counted as an error; not evidence of a duplicate
+            elif r.status_code >= 300 or r.json().get("id") != tid:
                 self.replay_mismatches += 1
 
     async def get_json(self, name: str, path: str) -> dict:
@@ -138,57 +147,109 @@ class VU:
         }
 
 
-async def run(args: argparse.Namespace) -> dict:
-    stages = [tuple(int(x) for x in s.split(":")) for s in args.stages.split(",")]
-    peak = max(v for _, v in stages)
-    limits = httpx.Limits(max_connections=peak + 50, max_keepalive_connections=peak + 50)
+def share(n: int, i: int, parts: int) -> int:
+    """Worker i's part of n, so that the parts add up to n exactly."""
+    return n * (i + 1) // parts - n * i // parts
+
+
+async def drive(args: argparse.Namespace, stages: list[tuple[int, int]], i: int, parts: int, barrier) -> dict:
+    """One load-generator process: its share of the VUs, on the same wall-clock schedule as the others."""
+    peak = share(max(v for _, v in stages), i, parts)
+    limits = httpx.Limits(max_connections=peak + 20, max_keepalive_connections=peak + 20)
     async with httpx.AsyncClient(base_url=args.base, timeout=30, limits=limits) as client:
-        setup_stats = Stats()
-        vus = [VU(client, setup_stats) for _ in range(peak)]
-        sem = asyncio.Semaphore(50)
+        vus = [VU(client, Stats()) for _ in range(peak)]
+        sem = asyncio.Semaphore(20)
 
         async def setup(v: VU) -> None:
             async with sem:
                 await v.setup()
 
-        print(f"setting up {peak} spaces", flush=True)
         await asyncio.gather(*(setup(v) for v in vus))
+        await asyncio.to_thread(barrier.wait)  # start together
 
         stats = Stats()
         for v in vus:
             v.stats = stats
         active = 0
-        stop_at: list[float] = []
+        total = sum(d for d, _ in stages)
+        stop_at = time.monotonic() + total
 
         async def loop(v: VU, index: int) -> None:
-            while time.monotonic() < stop_at[0]:
+            while time.monotonic() < stop_at:
                 if index >= active:
-                    await asyncio.sleep(0.05)
+                    await asyncio.sleep(0.2)
                     continue
                 await v.step()
                 await asyncio.sleep(random.uniform(0, args.think))
 
-        total = sum(d for d, _ in stages)
-        stop_at.append(time.monotonic() + total)
-        tasks = [asyncio.create_task(loop(v, i)) for i, v in enumerate(vus)]
+        tasks = [asyncio.create_task(loop(v, k)) for k, v in enumerate(vus)]
         for duration, n in stages:
-            active = n
-            print(f"stage: {n} VUs for {duration}s", flush=True)
+            active = share(n, i, parts)
+            if i == 0:
+                print(f"stage: {n} VUs for {duration}s", flush=True)
             end = time.monotonic() + duration
             while time.monotonic() < end:
                 stats.vus_per_sec[int(time.monotonic() - stats.t0)] = active
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
         await asyncio.gather(*tasks)
 
-        print("verifying money", flush=True)
-        verify_stats, verify_sem = Stats(), asyncio.Semaphore(25)
+        verify_sem = asyncio.Semaphore(10)
 
         async def verify(v: VU) -> dict:
-            v.stats = verify_stats  # keep verification out of the load numbers
+            v.stats = Stats()  # keep verification out of the load numbers
             async with verify_sem:
                 return await v.verify()
 
         checks = await asyncio.gather(*(verify(v) for v in vus))
+    return {
+        "per_sec": dict(stats.per_sec),
+        "errors_per_sec": dict(stats.errors_per_sec),
+        "vus_per_sec": stats.vus_per_sec,
+        "by_endpoint": dict(stats.by_endpoint),
+        "status": dict(stats.status),
+        "checks": checks,
+        "rejected": sum(v.rejected for v in vus),
+    }
+
+
+def worker(args: argparse.Namespace, stages: list[tuple[int, int]], i: int, parts: int, barrier, out) -> None:
+    out.put((i, asyncio.run(drive(args, stages, i, parts, barrier))))
+
+
+def run(args: argparse.Namespace) -> dict:
+    import multiprocessing as mp
+
+    stages = [tuple(int(x) for x in s.split(":")) for s in args.stages.split(",")]
+    peak = max(v for _, v in stages)
+    total = sum(d for d, _ in stages)
+    parts = args.procs
+    ctx = mp.get_context("fork")
+    barrier, out = ctx.Barrier(parts), ctx.Queue()
+    print(f"setting up {peak} spaces in {parts} load processes", flush=True)
+    procs = [ctx.Process(target=worker, args=(args, stages, i, parts, barrier, out)) for i in range(parts)]
+    for p in procs:
+        p.start()
+    parts_out = [out.get()[1] for _ in procs]
+    for p in procs:
+        p.join()
+    print("verified money", flush=True)
+
+    stats = Stats()
+    checks: list[dict] = []
+    rejected = 0
+    for w in parts_out:
+        for s, xs in w["per_sec"].items():
+            stats.per_sec[s].extend(xs)
+        for s, n in w["errors_per_sec"].items():
+            stats.errors_per_sec[s] += n
+        for s, n in w["vus_per_sec"].items():
+            stats.vus_per_sec[s] = stats.vus_per_sec.get(s, 0) + n
+        for name, xs in w["by_endpoint"].items():
+            stats.by_endpoint[name].extend(xs)
+        for code, n in w["status"].items():
+            stats.status[code] += n
+        checks += w["checks"]
+        rejected += w["rejected"]
 
     secs = sorted(stats.per_sec)
     series = [
@@ -220,6 +281,7 @@ async def run(args: argparse.Namespace) -> dict:
             "think_time_s": [0, args.think],
             "mix": {n: w for w, n in MIX},
             "api_replicas": args.replicas,
+            "load_processes": args.procs,
         },
         "headline": {
             "peak_rps_10s": round(max(rolling), 1),
@@ -241,7 +303,7 @@ async def run(args: argparse.Namespace) -> dict:
         "money": {
             "spaces": len(checks),
             "transfers": sum(c["transfers"] for c in checks),
-            "rejected_by_rules": sum(v.rejected for v in vus),
+            "rejected_by_rules": rejected,
             "books_balance": all(c["books_balance"] for c in checks),
             "balances_exact": sum(c["balance_ok"] for c in checks),
             "non_negative": all(c["non_negative"] for c in checks),
@@ -261,9 +323,10 @@ def main() -> None:
     p.add_argument("--stages", default="30:50,240:200,60:400,30:50")
     p.add_argument("--think", type=float, default=1.0, help="max think time between steps, seconds")
     p.add_argument("--replicas", type=int, default=2)
+    p.add_argument("--procs", type=int, default=4, help="load-generator processes")
     p.add_argument("--out", default="/tmp/bench.json")
     args = p.parse_args()
-    result = asyncio.run(run(args))
+    result = run(args)
     with open(args.out, "w") as f:
         json.dump(result, f, indent=1)
     print(json.dumps({"headline": result["headline"], "money": result["money"]}, indent=1), flush=True)
