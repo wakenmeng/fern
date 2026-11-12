@@ -1,5 +1,5 @@
-# Outbound-only Cloudflare Tunnel: no load balancer, no open inbound port. The tunnel is
-# remote-managed; its public hostname (fern-origin.waken.dev) points at http://fern-api.fern.svc:80.
+# Outbound-only Cloudflare Tunnel: no load balancer, no open inbound port. `make tunnel` creates the
+# tunnel and routes fern-origin.waken.dev to it; --url sends everything to the API service.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -16,7 +16,7 @@ spec:
       containers:
         - name: cloudflared
           image: cloudflare/cloudflared:2025.4.0
-          args: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run"]
+          args: ["tunnel", "--no-autoupdate", "--metrics", "0.0.0.0:2000", "run", "--url", "http://fern-api.fern.svc:80"]
           env:
             - name: TUNNEL_TOKEN
               valueFrom:

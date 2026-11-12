@@ -65,3 +65,14 @@ deploy: image k8s-secret k8s-migrate k8s-apply  ## build, push, migrate, roll ou
 
 k8s-status:
 	$(K) get pods,jobs,svc
+
+# Cloudflare Tunnel via the CLI (after `cloudflared tunnel login`): create "fern" once, point
+# fern-origin.waken.dev at it, and store its connector token in .env.deploy.
+tunnel:
+	cloudflared tunnel info fern >/dev/null 2>&1 || cloudflared tunnel create fern
+	cloudflared tunnel route dns --overwrite-dns fern fern-origin.waken.dev
+	@token=$$(cloudflared tunnel token fern); \
+	grep -v '^CLOUDFLARE_TUNNEL_TOKEN=' .env.deploy > .env.deploy.tmp; \
+	echo "CLOUDFLARE_TUNNEL_TOKEN=$$token" >> .env.deploy.tmp; \
+	chmod 600 .env.deploy.tmp; mv .env.deploy.tmp .env.deploy; \
+	echo "tunnel token written to .env.deploy"

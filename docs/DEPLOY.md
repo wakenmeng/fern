@@ -9,7 +9,7 @@
           ├─ /apps/fern/*  ─► Worker fern-router ─► fern-origin.waken.dev（Cloudflare Tunnel）
           │                                          └─► EKS · cloudflared ×2 ─► fern-api ×2 ─► RDS Postgres 16（Multi-AZ）
           │                                                                               └─► ElastiCache Redis
-          │                                                                               └─► Column / Plaid / Claude（出站）
+          │                                                                               └─► Column / Plaid / OpenAI（出站）
           └─ 其他路径 ─► GitHub Pages（博客，不变）
 ```
 
@@ -21,23 +21,20 @@
 
 ## 需要你本人做的事（一次性）
 
-1. **AWS：** 准备一个有管理员权限的账号，然后运行 `brew install awscli` 和 `aws configure sso`（或 `aws configure`）。确认 `aws sts get-caller-identity` 能返回账号。
+1. **AWS：** 准备一个有管理员权限的账号，然后运行 `brew install awscli` 和 `aws login`（或 `aws configure sso`）。确认 `aws sts get-caller-identity` 能返回账号。
 2. **Cloudflare 接管 DNS（建议提前一周）：**
    - 在 Cloudflare 添加站点 `waken.dev`（免费版），核对导入的 GitHub Pages 记录。
    - 在 Gandi 把 nameserver 改成 Cloudflare 给的两个。
    - SSL 模式选 **Full**。
    - 生效后，确认博客仍能正常打开。
    - 风险：GitHub Pages 证书续期时，如果记录是橙色代理状态，续期可能失败。如果出现证书问题，先把博客的记录改成灰色（DNS only），Worker 路由只需要 `waken.dev` 本身是代理状态。
-3. **Cloudflare Tunnel：**
-   - 进入 Zero Trust → Networks → Tunnels，创建隧道 `fern`。
-   - 添加 Public hostname：`fern-origin.waken.dev` → `HTTP` → `fern-api.fern.svc.cluster.local:80`。
-   - 复制 connector token，填到下一步的 `.env.deploy` 里。
+3. **Cloudflare Tunnel：** 运行 `cloudflared tunnel login`（浏览器里选 `waken.dev`），之后由 `make tunnel` 完成：创建隧道 `fern`、把 `fern-origin.waken.dev` 指向它、把 token 写进 `.env.deploy`。cloudflared 用 `--url http://fern-api.fern.svc:80` 转发，不需要在面板里配置。
 4. **密钥：** 运行 `cp .env.deploy.example .env.deploy`，然后填写：
    - 新的 `FERN_SESSION_SECRET`（用 `openssl rand -hex 32` 生成）；
    - **轮换过的** Column 和 Plaid sandbox key（旧 key 在聊天记录里出现过）；
-   - Anthropic key；
-   - 上一步复制的 tunnel token。
-5. **Wrangler 登录：** 运行 `cd infra/cloudflare && npx wrangler@4 login`。
+   - OpenAI key（`FERN_OPENAI_API_KEY`）；
+   - tunnel token（`make tunnel` 会自动填）。
+5. **Wrangler 登录：** 运行 `wrangler login`。
 
 ## 上线（H0–H4）
 
@@ -67,8 +64,8 @@ curl -s https://waken.dev/apps/fern/spaces       # 显示 ready: 5
 1. 生成静态归档（冻结的 JSON 快照和前端），发布到 GitHub Pages。
 2. 在 `wrangler.toml` 里设置 `ARCHIVE_ORIGIN` 并把 `MODE` 改成 `"archive"`，然后运行 `npx wrangler@4 deploy`。
 3. 运行 `make infra-down`，删除 namespace 和全部 AWS 资源。
-4. 在 Zero Trust 里删除隧道 `fern`。
-5. 轮换或作废 Column、Plaid、Anthropic 的 key。
+4. 运行 `cloudflared tunnel delete -f fern`，删除隧道。
+5. 轮换或作废 Column、Plaid、OpenAI 的 key。
 
 ## 费用估算（us-west-2，72 小时）
 
