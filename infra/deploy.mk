@@ -70,19 +70,23 @@ k8s-status:
 # Load test (about 8 minutes): a sim-bank copy of the API on its own database, driven by
 # bench/load.py from inside the cluster. Result: bench/results/latest.json. Everything is removed after.
 BENCH_STAGES ?= 30:50,240:200,60:400,30:50
+# The bench uses the image fern-api is running now, so it measures exactly what is live.
+BENCH_IMG   = $$($(K) get deployment fern-api -o jsonpath='{.spec.template.spec.containers[0].image}')
 bench:
 	@url=$$($(TFD) output -raw database_url | sed 's#/fern?sslmode#/fern_bench?sslmode#'); \
 	$(K) create secret generic fern-bench-env --from-literal=FERN_DATABASE_URL="$$url" \
 	  --dry-run=client -o yaml | $(K) apply -f - >/dev/null
 	$(K) delete job fern-bench-db fern-bench-load --ignore-not-found
-	sed "s#image: IMAGE#image: $(IMG)#" infra/k8s/job-bench-db.yaml | $(K) apply -f -
+	sed "s#image: IMAGE#image: $(BENCH_IMG)#" infra/k8s/job-bench-db.yaml | $(K) apply -f -
 	$(K) wait --for=condition=complete job/fern-bench-db --timeout=300s
-	sed "s#image: IMAGE#image: $(IMG)#" infra/k8s/bench-api.yaml | $(K) apply -f -
+	sed "s#image: IMAGE#image: $(BENCH_IMG)#" infra/k8s/bench-api.yaml | $(K) apply -f -
 	$(K) rollout status deployment/fern-bench --timeout=300s
 	$(K) create configmap fern-bench-script --from-file=bench/load.py --dry-run=client -o yaml | $(K) apply -f -
-	sed -e "s#image: IMAGE#image: $(IMG)#" -e 's#args: \[\]#args: ["--stages", "$(BENCH_STAGES)"]#' \
+	sed -e "s#image: IMAGE#image: $(BENCH_IMG)#" -e 's#args: \[\]#args: ["--stages", "$(BENCH_STAGES)"]#' \
 	  infra/k8s/job-bench-load.yaml | $(K) apply -f -
-	$(K) wait --for=condition=complete job/fern-bench-load --timeout=1800s
+	@until [ -n "$$($(K) get job fern-bench-load -o jsonpath='{.status.succeeded}{.status.failed}')" ]; do sleep 10; done; \
+	if [ "$$($(K) get job fern-bench-load -o jsonpath='{.status.succeeded}')" != 1 ]; then \
+	  $(K) logs job/fern-bench-load --tail=30; echo "bench job failed"; exit 1; fi
 	@mkdir -p bench/results
 	$(K) logs job/fern-bench-load | sed -n '/^BENCH_JSON_BEGIN$$/,/^BENCH_JSON_END$$/p' | sed '1d;$$d' \
 	  | python3 -m json.tool > bench/results/latest.json
