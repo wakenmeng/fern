@@ -12,3 +12,4 @@ infra/aws/.terraform/
 # Deploy secrets (make k8s-secret reads it)
 .env.deploy
 infra/.kubeconfig
+infra/aws/tfplan

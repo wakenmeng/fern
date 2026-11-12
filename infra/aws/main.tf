@@ -25,6 +25,8 @@ module "vpc" {
   enable_dns_hostnames    = true
 
   create_database_subnet_group = true
+  # No private subnets, so the database subnets need their own (local-only) route table.
+  create_database_subnet_route_table = true
 }
 
 module "eks" {
