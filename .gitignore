@@ -17,3 +17,4 @@ infra/.kubeconfig
 infra/aws/tfplan
 infra/aws-bench/tfplan
 infra/cloudflare/.wrangler/
+infra/cloudflare/archive/

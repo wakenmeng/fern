@@ -77,13 +77,22 @@ make k8s-pool        # 补回被 smoke 用掉的空间
 - **补充账户池：** 运行 `make k8s-pool`（会补满到 5 个）。
 - **查看日志：** 运行 `kubectl --kubeconfig infra/.kubeconfig -n fern logs deploy/fern-api -f`。
 
-## 下线（H68–H72）
+## 下线（上线一周，2026-11-19 11:00 PST）
 
-1. 生成静态归档（冻结的 JSON 快照和前端），发布到 GitHub Pages。
-2. 在 `wrangler.toml` 里设置 `ARCHIVE_ORIGIN` 并把 `MODE` 改成 `"archive"`，然后运行 `npx wrangler@4 deploy`。
-3. 运行 `make infra-down`，删除 namespace 和全部 AWS 资源。
+到 `wrangler.toml` 里的 `LIVE_UNTIL`，Worker 自动只返回 `infra/cloudflare/archive/` 里的静态文件（`index.html`、`bench.json`、`archive.json`），其他路径一律 410，不再转发到 AWS。不需要任何人到点操作。
+
+提前做（线上还活着时）：
+
+1. **录制：** 浏览器打开 `https://waken.dev/apps/fern/?record=1`，把 5 个 case、Ops、Eng 都走一遍，然后在控制台取出 `window.__fernRecording`，存为 `src/fern/web/archive.json`（token 已去掉）。
+2. **发布：** 运行 `make worker`（先 `make archive` 打包，再 `wrangler deploy`）。部署前可本地验证：`cd infra/cloudflare && npx wrangler@4 dev --var MODE:archive`，打开 `http://localhost:8787/apps/fern/`。
+
+到点之后（需要 `aws login`）：
+
+3. 运行 `AWS_PROFILE=fern-deploy make infra-down`，删除 namespace 和全部 AWS 资源。
 4. 运行 `cloudflared tunnel delete -f fern`，删除隧道。
 5. 轮换或作废 Column、Plaid、OpenAI 的 key。
+
+想提前或推迟：改 `LIVE_UNTIL` 后再 `make worker`。
 
 ## 费用估算（us-west-2，72 小时）
 

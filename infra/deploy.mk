@@ -12,7 +12,7 @@ K          := kubectl --kubeconfig $(KCFG) -n fern
 TAG        ?= $(shell git rev-parse --short HEAD)
 IMG         = $$($(TFD) output -raw ecr_repository_url):$(TAG)
 
-.PHONY: infra-up infra-down kubeconfig image k8s-secret k8s-migrate k8s-apply k8s-pool deploy k8s-status tunnel bench bench-up bench-down
+.PHONY: infra-up infra-down kubeconfig image k8s-secret k8s-migrate k8s-apply k8s-pool deploy k8s-status tunnel bench bench-up bench-down archive worker
 
 infra-up:  ## VPC, EKS, RDS, Redis, ECR (about 15-20 minutes)
 	$(TFD) init -input=false
@@ -132,6 +132,19 @@ bench:
 	@cp bench/results/latest.json bench/results/$$(date -u +%Y%m%dT%H%MZ).json
 	$(K) delete deployment/fern-bench service/fern-bench job/fern-bench-load job/fern-bench-db --ignore-not-found
 	@python3 -c "import json; r=json.load(open('bench/results/latest.json')); print(r['headline']); print(r['money'])"
+
+# The static archive the Worker serves from LIVE_UNTIL on (infra/cloudflare/wrangler.toml):
+# the frontend, the load-test result and the recorded live run (src/fern/web/archive.json,
+# recorded with ?record=1, see docs/DEPLOY.md).
+ARCHIVE_DIR := infra/cloudflare/archive
+archive:
+	mkdir -p $(ARCHIVE_DIR)
+	cp src/fern/web/index.html src/fern/web/bench.json $(ARCHIVE_DIR)/
+	@if [ -f src/fern/web/archive.json ]; then cp src/fern/web/archive.json $(ARCHIVE_DIR)/; \
+	else echo "warning: src/fern/web/archive.json missing; the archive would have no recorded run"; fi
+
+worker: archive  ## deploy the Worker (routing now, the archive after LIVE_UNTIL)
+	cd infra/cloudflare && npx wrangler@4 deploy
 
 # Cloudflare Tunnel via the CLI (after `cloudflared tunnel login`): create "fern" once, point
 # fern-origin.waken.dev at it, and store its connector token in .env.deploy.

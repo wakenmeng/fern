@@ -1,9 +1,32 @@
 // waken.dev/apps/fern/* -> Fern. Everything else on waken.dev (the blog) is untouched.
 //
 // MODE=live:    forward to the cluster through the Cloudflare Tunnel hostname (ORIGIN).
-// MODE=archive: after the 72-hour window, serve the static archive (ARCHIVE_ORIGIN, GitHub Pages).
-// MODE=paused:  money-moving requests get 503; reads and the archive links keep working.
+// MODE=archive: serve the static archive bundled with this Worker (./archive: index.html,
+//               bench.json, archive.json). Any other path is 410: the live API is gone.
+// MODE=paused:  money-moving requests get 503; reads keep working.
+// LIVE_UNTIL:   from this moment on the Worker behaves as MODE=archive, whatever MODE says,
+//               so the site goes static on time without anyone deploying anything.
 const PREFIX = "/apps/fern";
+
+export function modeOf(env, now = Date.now()) {
+  if (env.LIVE_UNTIL && now >= Date.parse(env.LIVE_UNTIL)) return "archive";
+  return env.MODE || "live";
+}
+
+async function archive(env, url, rest) {
+  const path = rest === "/" ? "/index.html" : rest;
+  const r = await env.ASSETS.fetch(new Request(new URL(path, url.origin)));
+  if (r.status === 200) {
+    const response = new Response(r.body, r);
+    response.headers.set("X-Fern-Mode", "archive");
+    response.headers.set("Cache-Control", "no-cache");
+    return response;
+  }
+  return Response.json(
+    { error: "Archived", message: "Fern's live run has ended; this is a static archive of it." },
+    { status: 410, headers: { "X-Fern-Mode": "archive" } },
+  );
+}
 
 export default {
   async fetch(request, env) {
@@ -12,13 +35,9 @@ export default {
     if (url.pathname === PREFIX) return Response.redirect(url.origin + PREFIX + "/", 301);
 
     const rest = url.pathname.slice(PREFIX.length) || "/";
-    const mode = env.MODE || "live";
+    const mode = modeOf(env);
 
-    if (mode === "archive") {
-      const target = new URL(env.ARCHIVE_ORIGIN.replace(/\/$/, "") + rest + url.search);
-      const r = await fetch(target, { headers: { "User-Agent": "fern-router" } });
-      return new Response(r.body, r);
-    }
+    if (mode === "archive") return archive(env, url, rest);
 
     if (mode === "paused" && request.method !== "GET" && request.method !== "HEAD") {
       return Response.json({ error: "Paused", message: "Fern is paused; reads still work." }, { status: 503 });
