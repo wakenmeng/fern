@@ -41,16 +41,26 @@
 在仓库根目录依次运行：
 
 ```bash
-make infra-up        # 15–20 分钟：VPC、EKS、RDS、Redis、ECR
+AWS_PROFILE=fern-deploy make infra-up   # 15–20 分钟：VPC、EKS、RDS、Redis、ECR
+make tunnel          # 创建隧道并把 token 写进 .env.deploy（需先 cloudflared tunnel login）
 make deploy          # 构建并推送镜像 → 写入 k8s 密钥 → 跑迁移 Job → 部署 api 和 cloudflared
 make k8s-pool        # 约 3 分钟：在 Column 上开 5 个空间并注资
 make k8s-status
-(cd infra/cloudflare && npx wrangler@4 deploy)
+(cd infra/cloudflare && wrangler deploy)
 curl -s https://waken.dev/apps/fern/healthz      # {"status":"ok"}
-curl -s https://waken.dev/apps/fern/spaces       # 显示 ready: 5
+uv run python bench/smoke.py https://waken.dev/apps/fern   # S1–S5 + 对账 + AI 日报，占用池里 1 个空间
+make k8s-pool        # 补回被 smoke 用掉的空间
 ```
 
 `kubectl` 只使用 `infra/.kubeconfig`，不会碰到你默认 context 里的其他集群。
+`aws login` 的凭证 15 分钟过期；`fern-deploy` profile 用 `credential_process` 自动续期，tofu 跑得久时要用它。
+
+## 压测（`make bench`，约 6 分钟）
+
+- 在集群里另起一份 API（`fern-bench`）：模拟银行、独立数据库 `fern_bench`（每次重建）、限流放宽。Column sandbox 和线上账户池都不受影响。
+- `bench/load.py` 作为 Job 在集群内运行，4 个进程发压，阶梯 25/50/100/150/200 个虚拟用户，每档 60 秒；结束后逐个空间核对：账平、可用余额与客户端预期一致、无负数、重放同一幂等键不会产生第二笔。
+- 结果写到 `bench/results/latest.json`；要上页面就复制到 `src/fern/web/bench.json` 并重新部署。
+- 2026-11-12 的结果：p95 ≤ 500 ms 时约 97 req/s（50 用户，p95 57 ms），吞吐上限约 165 req/s；瓶颈是 RDS db.t4g.micro 的 CPU（100 用户起 85–95%），不是 API。13,856 笔转账，0 资金错误。
 
 ## 运行中（H4–H68）
 
