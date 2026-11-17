@@ -245,6 +245,8 @@ a.lnk { color: var(--fern); text-decoration: none; border-bottom: 1px solid rgba
 .hc { color: rgba(241,247,242,.42); } .hs { color: #A8E6BD; } .hk { color: #C9A7FF; }
 .states { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .states .arrow { color: var(--faint); font-size: 13px; white-space: pre; }
+.archive-note { background: var(--amber-soft); border-bottom: 1px solid rgba(242,184,75,.25); color: var(--muted); font-size: 13px; padding: 9px 0; }
+.archive-note b { color: var(--amber); font-weight: 600; }
 .anno { border-left: 2px solid var(--fern); padding: 4px 12px; font-size: 13.5px; color: var(--muted); }
 details.adr { border: 1px solid var(--line); border-radius: 14px; padding: 12px 16px; margin-bottom: 10px; background: var(--surface); }
 details.adr summary { cursor: pointer; font-weight: 600; list-style-position: outside; }
@@ -427,6 +429,7 @@ details.tbl table { margin-top: 8px; font-size: 12px; }
     <div class="sandbox">Sandbox · No real money</div>
   </div>
 </header>
+<div id="archive-note" class="archive-note" hidden></div>
 <main id="view"></main>
 <div id="toast"></div>
 
@@ -445,7 +448,49 @@ const store = {
 const newKey = () => (crypto.randomUUID ? crypto.randomUUID() : `k-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 let SESSION = null;
 
+// ================================================================== record and archive
+// ?record=1 keeps every API call, in order, in window.__fernRecording (tokens stripped); the archive
+// run saves it as archive.json. When archive.json is served (the static archive after the live
+// system is shut down), the page replays that recording instead of calling the API. Static files
+// always come from the network.
+const STATIC = new Set(["bench.json", "archive.json"]);
+const RECORD = new URLSearchParams(location.search).has("record");
+if (RECORD) window.__fernRecording = { recorded_at: new Date().toISOString(), calls: [] };
+let ARCHIVE = null;  // { recorded_at, calls, cursor }: cursor is the index after the last replayed write
+const stripTokens = v => Array.isArray(v) ? v.map(stripTokens)
+  : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([k]) => k !== "token").map(([k, x]) => [k, stripTokens(x)])) : v;
+async function loadArchive() {
+  if (RECORD) return;
+  try {
+    const r = await fetch(BASE + "archive.json", { cache: "no-cache" });
+    if (!r.ok) return;  // the live API answers 404
+    const d = await r.json();
+    if (Array.isArray(d.calls) && d.calls.length) ARCHIVE = { ...d, cursor: 0 };
+  } catch { /* not an archive */ }
+}
+const ARCHIVED = { status: 410, data: { error: "Archived", message: "Not available in the archive: this wasn't part of the recorded run." }, archived: true };
+// A write takes the next recorded call with the same method and path. A read gets the state as of
+// now: the latest recorded response before the next write still to replay, else the first after it.
+async function replay(method, path) {
+  const calls = ARCHIVE.calls, same = c => c.method === method && c.path === path;
+  let hit = -1;
+  if (method !== "GET") {
+    hit = calls.findIndex((c, i) => i >= ARCHIVE.cursor && same(c));
+    if (hit >= 0) ARCHIVE.cursor = hit + 1;
+    await new Promise(r => setTimeout(r, 250));  // long enough to see the busy state
+  } else {
+    let next = calls.findIndex((c, i) => i >= ARCHIVE.cursor && c.method !== "GET");
+    if (next < 0) next = calls.length;
+    for (let i = next - 1; i >= 0 && hit < 0; i--) if (same(calls[i])) hit = i;
+    if (hit < 0) hit = calls.findIndex((c, i) => i >= next && same(c));
+  }
+  if (hit < 0) return structuredClone(ARCHIVED);
+  const c = calls[hit];
+  return { status: c.status, data: structuredClone(c.response), traceId: c.trace_id || null };
+}
+
 async function call(method, path, body, { idem } = {}) {
+  if (ARCHIVE && !STATIC.has(path)) return replay(method, path);
   const headers = {};
   if (SESSION) headers.Authorization = `Bearer ${SESSION.token}`;
   if (idem) headers["Idempotency-Key"] = idem;
@@ -456,7 +501,13 @@ async function call(method, path, body, { idem } = {}) {
   const text = await r.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = { raw: text.slice(0, 500) }; }
-  return { status: r.status, data, traceId: r.headers.get("X-Trace-Id") };
+  const out = { status: r.status, data, traceId: r.headers.get("X-Trace-Id") };
+  if (RECORD && !STATIC.has(path)) {
+    const rec = window.__fernRecording.calls;
+    rec.push({ method, path, body: body === undefined ? null : stripTokens(body), status: out.status, response: stripTokens(data), trace_id: out.traceId });
+    document.querySelector(".sandbox").textContent = `Recording · ${rec.length} calls`;
+  }
+  return out;
 }
 const errText = r => { const d = r.data || {}; return d.message || (typeof d.detail === "string" ? d.detail : d.detail ? JSON.stringify(d.detail) : d.error) || `HTTP ${r.status}`; };
 
@@ -481,7 +532,8 @@ function toast(msg) {
 }
 
 async function boot() {
-  SESSION = store.get("fern.session");
+  // Recording and the archive always start from a fresh space, so the recording begins with POST /spaces.
+  SESSION = ARCHIVE || RECORD ? null : store.get("fern.session");
   if (SESSION && (await call("GET", "me")).status !== 200) SESSION = null;
   if (!SESSION) {
     const r = await call("POST", "spaces");
@@ -493,14 +545,23 @@ async function boot() {
   await loadRecentTraces();
   render();
 }
-function setSession(d) { SESSION = { token: d.token, space_id: d.space_id }; store.set("fern.session", SESSION); S.join = null; }
+function showArchive() {
+  const when = new Date(ARCHIVE.recorded_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  document.querySelector(".sandbox").textContent = "Archive · No real money";
+  const note = document.getElementById("archive-note");
+  note.innerHTML = `<div class="wrap"><b>Archive</b> · recorded from the live system on ${esc(when)}. The buttons replay that run; Column, Plaid and OpenAI are not called.</div>`;
+  note.hidden = false;
+}
+function setSession(d) { SESSION = { token: d.token, space_id: d.space_id }; if (!ARCHIVE) store.set("fern.session", SESSION); S.join = null; }
 async function joinSpace(id) {
   const r = await call("POST", `spaces/${id}/join`);
   if (r.status !== 200) return toast(errText(r));
   setSession(r.data); await refresh(); await loadRecentTraces(); render();
 }
 async function newSpace() {
-  store.set("fern.session", null); SESSION = null;
+  if (ARCHIVE) ARCHIVE.cursor = 0;  // start over replays the recording from the top
+  else store.set("fern.session", null);
+  SESSION = null;
   Object.assign(S, { me: null, transfers: [], traces: [], trace: null, span: null, ops: null, report: null, refs: {} });
   render(); await boot();
 }
@@ -1248,7 +1309,7 @@ function engApi() {
   const errors = [["401", "Missing or invalid session token", "no"], ["404", "Not found in this space", "no"], ["409", "Conflict (e.g. the bank can't do this in the sandbox)", "no"], ["422", "Validation or business rule (InsufficientFunds, AccountFrozen, key reused with a different body)", "no"], ["429", "Rate limited (Redis token bucket per space)", "yes, after Retry-After"], ["5xx", "Server error", "yes, with the same Idempotency-Key"]];
   return `<div class="card pad"><div class="doc">
       <div class="doc-nav">${groups.map(g => `<div class="grp">${g}</div>${ENDPOINTS.filter(e => e.g === g).map(e => `<button class="${e === ep ? "on" : ""}" onclick="S.api='${key(e)}';S.apiResult=null;S.apiTrace=null;render()"><span class="method ${e.m}">${e.m}</span><span class="mono">${e.p}</span></button>`).join("")}`).join("")}
-        <p class="faint small" style="margin:14px 10px 0">OpenAPI at <a class="lnk mono" href="${BASE}docs" target="_blank" rel="noopener">docs</a>, generated from the FastAPI models.</p></div>
+        <p class="faint small" style="margin:14px 10px 0">${ARCHIVE ? "The OpenAPI docs were generated by the live API from its FastAPI models; they are not part of the archive." : `OpenAPI at <a class="lnk mono" href="${BASE}docs" target="_blank" rel="noopener">docs</a>, generated from the FastAPI models.`}</p></div>
       <div><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span class="method ${ep.m}" style="width:auto;font-size:13px">${ep.m}</span><span class="mono" style="font-size:15px">${ep.p}</span></div>
         <p style="margin:8px 0 0">${ep.d}</p>
         <div class="badges"><span class="chip flat c-grey">Auth: ${ep.noAuth ? "none" : "Bearer token (bound to one space)"}</span>${ep.idem ? `<span class="chip flat c-blue">Idempotency-Key required</span>` : ""}${ep.limited ? `<span class="chip flat c-grey">rate limited per space</span>` : ""}<span class="chip flat c-grey">Money in integer cents</span></div>
@@ -1305,6 +1366,7 @@ async function act(kind, arg) {
     const ep = ENDPOINTS.find(e => `${e.m} ${e.p}` === S.api);
     const path = ep.path ? ep.path() : ep.p;
     if (!path) return toast("Nothing to point this at yet. Run a case first.");
+    if (ARCHIVE && ep.m !== "GET") { S.apiResult = { status: 410, data: { error: "Archived", message: "In the archive, Try it replays GET requests only." } }; S.apiTrace = null; return render(); }
     const body = ep.body ? ep.body() : ep.m === "POST" ? undefined : undefined;
     let r;
     if (ep.m === "GET") { r = await call("GET", path.slice(1)); }
@@ -1354,7 +1416,7 @@ async function openDetail(id) {
 
 render();
 if (location.hash === "#/eng/benchmark") history.replaceState(null, "", "#/bench");
-boot().then(async () => { const [top] = route(); if (["", "eng", "bench"].includes(top)) { await Promise.all([refreshStatus(), refreshBench()]); render(); } });
+loadArchive().then(() => { if (ARCHIVE) showArchive(); return boot(); }).then(async () => { const [top] = route(); if (["", "eng", "bench"].includes(top)) { await Promise.all([refreshStatus(), refreshBench()]); render(); } });
 </script>
 </body>
 </html>

@@ -98,7 +98,8 @@ Operations 是备用页，被问到「内部怎么运营」时再打开。
 - 每次点击生成新的 `Idempotency-Key`；请求后用响应头 `X-Trace-Id` 取 trace，再刷新 `/me`、`/transfers`、试算平衡
 - 模拟银行和 Column 走不同的 S5：模拟银行退回已结算的拉款（R10，可变负数）；Column 上发起收款人为 `RETURN_UNAUTH` 的拉款并结算（R29，restriction 吃掉损失）
 - 不引入组件库；服务节点图和瀑布图用 SVG 和 CSS 自己画
-- 72 小时后的静态归档：同一页面，数据换成冻结的 JSON 快照（还没做）
+- 录制：URL 带 `?record=1` 时，每次 API 调用按顺序存进 `window.__fernRecording`（`{recorded_at, calls: [{method, path, body, status, response, trace_id}]}`），去掉所有 `token` 字段，不存请求头；录制总是从新空间（`POST /spaces`）开始
+- 静态归档：启动时先取 `archive.json`，拿到就进入回放，不再调 API。写请求取游标之后下一条同方法、同路径的录制；读请求取下一条未回放写请求之前最近的一次响应，没有就取之后第一条；录制里没有的显示「Not available in the archive」。start over 把游标归零；顶部横幅说明这是录制；API 页的 Try it 只回放 GET，OpenAPI 链接换成说明。`bench.json`、`archive.json` 总是走网络
 
 ---
 
