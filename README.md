@@ -1,7 +1,7 @@
 # Fern
 
-A neobank backend demo, live at **https://waken.dev/apps/fern/** until 2026-11-19 (a static archive
-after that). Five everyday banking flows on a double-entry ledger, built to survive the failure modes a
+A neobank backend demo at **https://waken.dev/apps/fern/**. It ran live on AWS from 2026-11-12 to
+11-17; the site is now a static archive that replays a run recorded from the live system. Five everyday banking flows on a double-entry ledger, built to survive the failure modes a
 real money system meets. **Sandbox only. No real money, no real identities.**
 
 ## Architecture
