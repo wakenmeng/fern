@@ -9,7 +9,8 @@ routes = [{ pattern = "waken.dev/apps/fern*", zone_name = "waken.dev" }]
 assets = { directory = "./archive", binding = "ASSETS", run_worker_first = true }
 
 [vars]
-MODE = "live"
+# Live run ended 2026-11-17: the AWS stack is torn down, the Worker serves only ./archive.
+MODE = "archive"
 ORIGIN = "https://fern-origin.waken.dev"
 # One week live (2026-11-12 to 11-19, 11:00 PST); after this the Worker serves only ./archive.
 LIVE_UNTIL = "2026-11-19T19:00:00Z"
